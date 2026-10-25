@@ -760,6 +760,14 @@
       "type": "Layer",
       "hex": "#f2c9a8",
       "owned": true
+    },
+    {
+      "id": "p-vallejo-sunrise-blue",
+      "name": "Sunrise Blue",
+      "brand": "Vallejo",
+      "type": "Layer",
+      "hex": "#6fb3d9",
+      "owned": true
     }
   ],
   "recipes": [
@@ -868,6 +876,18 @@
           "paintId": "p-ak-pale-yellow"
         },
         {
+          "area": "Capes",
+          "technique": "Effet",
+          "paintName": "Blanc",
+          "notes": "Signes elfiques"
+        },
+        {
+          "area": "Capes",
+          "technique": "Couche",
+          "paintId": "p-vallejo-sunrise-blue",
+          "notes": "Sur le blanc des signes elfiques"
+        },
+        {
           "area": "Tenues",
           "technique": "Base",
           "paintId": "p-ak-dark-green"
@@ -903,5 +923,5 @@
     }
   ],
   "miniatures": [],
-  "lastUpdated": "2026-10-25T11:56:26Z"
+  "lastUpdated": "2026-10-25T11:59:05Z"
 }
