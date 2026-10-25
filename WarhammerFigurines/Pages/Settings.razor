@@ -1,0 +1,150 @@
+@page "/parametres"
+@inject SettingsService Config
+@inject CollectionStore Store
+@inject IJSRuntime JS
+
+<PageTitle>Réglages — Hobby Warhammer</PageTitle>
+
+<header class="page-header">
+    <h1>⚙️ Réglages</h1>
+</header>
+
+<div class="card form">
+    @if (Store.CanEdit)
+    {
+        <div class="sync-status sync-ok">✅ Connecté — chaque modification est un commit dans le repo.</div>
+    }
+    else if (Store.Source == DataSource.GitHub)
+    {
+        <div class="sync-status sync-readonly">👁️ Lecture seule — ajoute un token pour modifier.</div>
+    }
+    else
+    {
+        <div class="sync-status sync-warn">⚠️ @(Store.LoadError ?? "Données non chargées.")</div>
+    }
+
+    @if (_feedback is not null)
+    {
+        <div class="sync-status @_feedbackClass">@_feedback</div>
+    }
+
+    <label class="form-field">
+        <span class="form-label">Token GitHub</span>
+        <input class="form-input" type="@(_showToken ? "text" : "password")" @bind="_token"
+               placeholder="github_pat_…" autocapitalize="off" autocorrect="off" spellcheck="false" />
+        <span class="form-hint">
+            Fine-grained token limité au repo <b>@_owner/@_repo</b>, permission
+            <b>Contents : Read and write</b>. Stocké uniquement sur cet appareil.
+        </span>
+    </label>
+    <label class="check-item">
+        <input type="checkbox" @bind="_showToken" /> Afficher le token
+    </label>
+
+    <details class="config-section">
+        <summary>🔧 Emplacement des données</summary>
+        <label class="form-field">
+            <span class="form-label">Propriétaire</span>
+            <input class="form-input" @bind="_owner" autocapitalize="off" />
+        </label>
+        <label class="form-field">
+            <span class="form-label">Repo</span>
+            <input class="form-input" @bind="_repo" autocapitalize="off" />
+        </label>
+        <div class="filters-row">
+            <label class="form-field">
+                <span class="form-label">Branche</span>
+                <input class="form-input" @bind="_branch" autocapitalize="off" />
+            </label>
+            <label class="form-field">
+                <span class="form-label">Fichier</span>
+                <input class="form-input" @bind="_path" autocapitalize="off" />
+            </label>
+        </div>
+        <button class="action-btn" @onclick="ResetTarget">↺ Valeurs par défaut</button>
+    </details>
+
+    <button class="action-btn btn-primary" @onclick="SaveAsync" disabled="@_busy">
+        @(_busy ? "⏳ Vérification…" : "💾 Enregistrer et tester")
+    </button>
+</div>
+
+<div class="card form">
+    <button class="action-btn" @onclick="ReloadAsync" disabled="@_busy">⟳ Recharger les données</button>
+    <a class="action-btn" href="@HistoryUrl" target="_blank" rel="noopener">🕓 Historique des modifications (GitHub)</a>
+    <button class="action-btn" @onclick="HardRefreshAsync" disabled="@_busy">🔄 Forcer la mise à jour de l'app</button>
+    @if (Config.CanSave)
+    {
+        <button class="action-btn btn-danger" @onclick="DisconnectAsync" disabled="@_busy">🔒 Oublier le token</button>
+    }
+</div>
+
+<p class="app-version">
+    Hobby Warhammer — v@(AppInfo.Version)
+    @if (Store.LastSync is not null) { <br /><small>Dernière synchro : @Store.LastSync.Value.ToString("dd/MM/yyyy HH:mm")</small> }
+</p>
+
+@code {
+    private string? _token;
+    private string _owner = "", _repo = "", _branch = "", _path = "";
+    private bool _showToken;
+    private bool _busy;
+    private string? _feedback;
+    private string _feedbackClass = "";
+
+    private string HistoryUrl => $"https://github.com/{_owner}/{_repo}/commits/{_branch}/{_path}";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Config.EnsureLoadedAsync();
+        await Store.EnsureLoadedAsync();
+        _token = Config.Token;
+        LoadTarget(Config.Target);
+    }
+
+    private void LoadTarget(RepoTarget t) =>
+        (_owner, _repo, _branch, _path) = (t.Owner, t.Repo, t.Branch, t.Path);
+
+    private void ResetTarget() => LoadTarget(SettingsService.DefaultTarget);
+
+    private async Task SaveAsync()
+    {
+        _busy = true; _feedback = null;
+        var target = new RepoTarget(_owner.Trim(), _repo.Trim(), _branch.Trim(), _path.Trim().TrimStart('/'));
+        await Config.SaveAsync(target, _token);
+        await Store.ReloadAsync();
+        if (Store.Source == DataSource.GitHub)
+        {
+            var d = Store.Data!;
+            _feedback = $"✅ Chargé : {d.Miniatures.Count} figurine(s), {d.Recipes.Count} recette(s), {d.Paints.Count} peinture(s).";
+            _feedbackClass = "sync-ok";
+        }
+        else
+        {
+            _feedback = $"⚠️ Connexion impossible : {Store.LoadError ?? "vérifie le repo et le réseau"}";
+            _feedbackClass = "sync-warn";
+        }
+        _busy = false;
+    }
+
+    private async Task ReloadAsync()
+    {
+        _busy = true;
+        await Store.ReloadAsync();
+        _busy = false;
+    }
+
+    private async Task DisconnectAsync()
+    {
+        _token = null;
+        await Config.SaveAsync(Config.Target, null);
+        _feedback = "🔒 Token oublié — lecture seule.";
+        _feedbackClass = "sync-readonly";
+    }
+
+    private async Task HardRefreshAsync()
+    {
+        _busy = true;
+        await JS.InvokeVoidAsync("hobby.hardRefresh");
+    }
+}

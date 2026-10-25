@@ -1,0 +1,91 @@
+@page "/figurines"
+@implements IDisposable
+@inject CollectionStore Store
+
+<PageTitle>Figurines — Hobby Warhammer</PageTitle>
+
+<header class="page-header">
+    <h1>⚔️ Figurines</h1>
+    <div class="header-sub">@Filtered.Sum(m => m.Quantity) figurine(s) affichée(s)</div>
+</header>
+
+<SyncBanner />
+
+<div class="filters">
+    <input class="form-input" type="search" placeholder="🔍 Rechercher…" @bind="_search" @bind:event="oninput" />
+    <div class="filters-row">
+        <select class="form-input" @bind="_faction">
+            <option value="">Toutes factions</option>
+            @foreach (var faction in Store.Factions)
+            {
+                <option value="@faction">@faction</option>
+            }
+        </select>
+        <select class="form-input" @bind="Statut">
+            <option value="">Tous statuts</option>
+            @foreach (var status in Labels.Statuses)
+            {
+                <option value="@status">@Labels.Icon(status) @Labels.Of(status)</option>
+            }
+        </select>
+    </div>
+</div>
+
+@if (Store.CanEdit)
+{
+    <a class="action-btn btn-primary" href="figurine/nouvelle">➕ Ajouter une figurine</a>
+}
+
+@if (Store.Data is null)
+{
+    <p class="muted">Chargement…</p>
+}
+else if (!Filtered.Any())
+{
+    <p class="empty">Aucune figurine@(Store.Data.Miniatures.Count > 0 ? " pour ces filtres" : " pour l'instant").</p>
+}
+else
+{
+    @foreach (var group in Filtered.GroupBy(m => m.Faction ?? "Sans faction").OrderBy(g => g.Key))
+    {
+        <section class="card">
+            <h2 class="card-title">@group.Key <small>(@group.Sum(m => m.Quantity))</small></h2>
+            @foreach (var mini in group.OrderBy(m => m.Status).ThenBy(m => m.Name))
+            {
+                <a class="list-row" href="figurine/@mini.Id">
+                    <span class="list-row-main">
+                        <b>@mini.Name @(mini.Quantity > 1 ? $"×{mini.Quantity}" : "")</b>
+                        <small>@mini.Game</small>
+                    </span>
+                    <StatusBadge Status="mini.Status" />
+                </a>
+            }
+        </section>
+    }
+}
+
+@code {
+    /// <summary>Filtre de statut, pré-rempli depuis les tuiles de l'accueil.</summary>
+    [SupplyParameterFromQuery(Name = "statut")]
+    public string? Statut { get; set; }
+
+    private string? _search;
+    private string? _faction;
+
+    private IEnumerable<Miniature> Filtered =>
+        (Store.Data?.Miniatures ?? [])
+            .Where(m => string.IsNullOrEmpty(_faction) || string.Equals(m.Faction?.Trim(), _faction, StringComparison.OrdinalIgnoreCase))
+            .Where(m => string.IsNullOrEmpty(Statut) || m.Status.ToString() == Statut)
+            .Where(m => string.IsNullOrWhiteSpace(_search)
+                        || m.Name.Contains(_search, StringComparison.OrdinalIgnoreCase)
+                        || (m.Notes?.Contains(_search, StringComparison.OrdinalIgnoreCase) ?? false));
+
+    protected override async Task OnInitializedAsync()
+    {
+        Store.Changed += OnChanged;
+        await Store.EnsureLoadedAsync();
+    }
+
+    private void OnChanged() => InvokeAsync(StateHasChanged);
+    public void Dispose() => Store.Changed -= OnChanged;
+}

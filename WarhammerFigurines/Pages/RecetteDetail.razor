@@ -1,0 +1,330 @@
+@page "/recette/{Id}"
+@implements IDisposable
+@inject CollectionStore Store
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>@(Recipe?.Name ?? "Recette") — Hobby Warhammer</PageTitle>
+
+<a class="back-link" href="recettes">‹ Recettes</a>
+
+@if (_edit is not null)
+{
+    <header class="page-header">
+        <h1>@(IsNew ? "➕ Nouvelle recette" : "✏️ Modifier")</h1>
+    </header>
+
+    <div class="card form">
+        <label class="form-field">
+            <span class="form-label">Nom *</span>
+            <input class="form-input" @bind="_edit.Name" placeholder="ex : Armure Ultramarines" />
+        </label>
+        <label class="form-field">
+            <span class="form-label">Faction</span>
+            <input class="form-input" @bind="_edit.Faction" list="factions" placeholder="Vide = recette générique" />
+        </label>
+        <label class="form-field">
+            <span class="form-label">Description</span>
+            <textarea class="form-input" rows="2" @bind="_edit.Description"></textarea>
+        </label>
+        <label class="form-field">
+            <span class="form-label">Tags (séparés par des virgules)</span>
+            <input class="form-input" @bind="_tags" placeholder="ex : armure, bleu, rapide" />
+        </label>
+    </div>
+
+    <h2 class="section-title">Étapes</h2>
+    @for (var i = 0; i < _edit.Steps.Count; i++)
+    {
+        var index = i;
+        var step = _edit.Steps[index];
+        <div class="card form step-edit">
+            <div class="step-edit-head">
+                <span class="step-num">@(index + 1)</span>
+                <button class="icon-btn" title="Monter" disabled="@(index == 0)" @onclick="() => Move(index, -1)">▲</button>
+                <button class="icon-btn" title="Descendre" disabled="@(index == _edit.Steps.Count - 1)" @onclick="() => Move(index, 1)">▼</button>
+                <button class="icon-btn icon-danger" title="Supprimer l'étape" @onclick="() => _edit.Steps.RemoveAt(index)">✕</button>
+            </div>
+            <div class="filters-row">
+                <label class="form-field">
+                    <span class="form-label">Zone</span>
+                    <input class="form-input" @bind="step.Area" list="areas" placeholder="ex : Armure" />
+                </label>
+                <label class="form-field">
+                    <span class="form-label">Technique</span>
+                    <input class="form-input" @bind="step.Technique" list="techniques" />
+                </label>
+            </div>
+            <label class="form-field">
+                <span class="form-label">Peinture <PaintSwatch Paint="Store.PaintById(step.PaintId)" /></span>
+                <select class="form-input" value="@(step.PaintId ?? "")"
+                        @onchange="e => step.PaintId = string.IsNullOrEmpty(e.Value?.ToString()) ? null : e.Value.ToString()">
+                    <option value="">— Hors catalogue (texte libre) —</option>
+                    @foreach (var type in PaintsByType)
+                    {
+                        <optgroup label="@type.Key">
+                            @foreach (var paint in type)
+                            {
+                                <option value="@paint.Id">@paint.Name@(paint.Owned ? "" : " (à acheter)")</option>
+                            }
+                        </optgroup>
+                    }
+                </select>
+            </label>
+            @if (step.PaintId is null)
+            {
+                <label class="form-field">
+                    <span class="form-label">Peinture (texte libre)</span>
+                    <input class="form-input" @bind="step.PaintName" placeholder="ex : Mélange 50/50 Macragge + Calgar" />
+                </label>
+            }
+            <label class="form-field">
+                <span class="form-label">Notes</span>
+                <input class="form-input" @bind="step.Notes" placeholder="ex : 2 couches fines, pinceau M" />
+            </label>
+        </div>
+    }
+    <button class="action-btn" @onclick="AddStep">➕ Ajouter une étape</button>
+
+    <div class="form-actions">
+        <button class="action-btn btn-primary" @onclick="SaveAsync" disabled="@(_busy || string.IsNullOrWhiteSpace(_edit.Name))">
+            @(_busy ? "⏳ Enregistrement…" : "💾 Enregistrer")
+        </button>
+        <button class="action-btn" @onclick="Cancel" disabled="@_busy">Annuler</button>
+    </div>
+    @if (_error is not null) { <div class="sync-status sync-warn">⚠️ @_error</div> }
+
+    <Suggestions Id="factions" Values="Store.Factions" />
+    <Suggestions Id="techniques" Values="Labels.Techniques" />
+    <Suggestions Id="areas" Values="KnownAreas" />
+}
+else if (Store.Data is null)
+{
+    <p class="muted">Chargement…</p>
+}
+else if (Recipe is null)
+{
+    <p class="empty">Recette introuvable.</p>
+}
+else
+{
+    <header class="page-header">
+        <h1>@Recipe.Name</h1>
+        <div class="header-sub">@(string.IsNullOrWhiteSpace(Recipe.Faction) ? "Recette générique" : Recipe.Faction)</div>
+        @if (Recipe.Tags.Count > 0)
+        {
+            <div class="chips">
+                @foreach (var tag in Recipe.Tags) { <span class="chip chip-header">#@tag</span> }
+            </div>
+        }
+    </header>
+
+    <SyncBanner />
+
+    @if (!string.IsNullOrWhiteSpace(Recipe.Description))
+    {
+        <section class="card"><p class="notes">@Recipe.Description</p></section>
+    }
+
+    var missing = Store.MissingPaints(Recipe).ToList();
+    @if (missing.Count > 0)
+    {
+        <div class="sync-status sync-warn">🛒 À acheter : @string.Join(", ", missing.Select(p => p.Name))</div>
+    }
+
+    @foreach (var area in Recipe.Steps.Select((s, i) => (Step: s, Num: i + 1)).GroupBy(x => string.IsNullOrWhiteSpace(x.Step.Area) ? "Général" : x.Step.Area))
+    {
+        <section class="card">
+            <h2 class="card-title">@area.Key</h2>
+            <ol class="steps">
+                @foreach (var (step, num) in area)
+                {
+                    var paint = Store.PaintById(step.PaintId);
+                    <li class="step-row">
+                        <span class="step-num">@num</span>
+                        <PaintSwatch Paint="paint" Large="true" />
+                        <span class="step-main">
+                            <b>@Store.PaintLabel(step)</b>
+                            <small>@step.Technique@(paint is null ? "" : $" · {paint.Brand} {paint.Type}")</small>
+                            @if (!string.IsNullOrWhiteSpace(step.Notes)) { <small class="muted">@step.Notes</small> }
+                        </span>
+                    </li>
+                }
+            </ol>
+        </section>
+    }
+
+    var minis = Store.MiniaturesUsing(Recipe.Id).ToList();
+    @if (minis.Count > 0)
+    {
+        <section class="card">
+            <h2 class="card-title">⚔️ Utilisée sur</h2>
+            @foreach (var mini in minis)
+            {
+                <a class="list-row" href="figurine/@mini.Id">
+                    <span class="list-row-main"><b>@mini.Name</b></span>
+                    <StatusBadge Status="mini.Status" />
+                </a>
+            }
+        </section>
+    }
+
+    <div class="form-actions">
+        <button class="action-btn" @onclick="CopyAsync">📋 Copier le texte</button>
+        @if (Store.CanEdit)
+        {
+            <button class="action-btn btn-primary" @onclick="StartEdit">✏️ Modifier</button>
+            <button class="action-btn" @onclick="DuplicateAsync" disabled="@_busy">⧉ Dupliquer</button>
+            <button class="action-btn btn-danger" @onclick="DeleteAsync" disabled="@_busy">🗑️ Supprimer</button>
+        }
+    </div>
+    @if (_error is not null) { <div class="sync-status sync-warn">⚠️ @_error</div> }
+    @if (_info is not null) { <div class="sync-status sync-ok">@_info</div> }
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = "";
+
+    private bool IsNew => Id == "nouvelle";
+    private Recipe? Recipe => Store.RecipeById(Id);
+
+    private Recipe? _edit;
+    private string? _tags;
+    private bool _busy;
+    private string? _error;
+    private string? _info;
+
+    private IEnumerable<IGrouping<string, Paint>> PaintsByType =>
+        (Store.Data?.Paints ?? []).OrderBy(p => p.Name).GroupBy(p => p.Type).OrderBy(g => g.Key);
+
+    private IEnumerable<string> KnownAreas =>
+        (Store.Data?.Recipes ?? []).SelectMany(r => r.Steps).Select(s => s.Area)
+            .Where(a => !string.IsNullOrWhiteSpace(a)).Select(a => a!).Distinct().Order();
+
+    protected override async Task OnInitializedAsync()
+    {
+        Store.Changed += OnChanged;
+        await Store.EnsureLoadedAsync();
+    }
+
+    protected override void OnParametersSet()
+    {
+        _error = null; _info = null;
+        _edit = null;
+        if (IsNew)
+        {
+            _edit = new Recipe();
+            _tags = null;
+            AddStep();
+        }
+    }
+
+    private void StartEdit()
+    {
+        _edit = CollectionStore.Clone(Recipe!);
+        _tags = string.Join(", ", _edit.Tags);
+    }
+
+    private void Cancel()
+    {
+        if (IsNew) Nav.NavigateTo("recettes");
+        else _edit = null;
+    }
+
+    /// <summary>Nouvelle étape : reprend la zone de la précédente pour aller vite.</summary>
+    private void AddStep() =>
+        _edit!.Steps.Add(new RecipeStep { Area = _edit.Steps.LastOrDefault()?.Area });
+
+    private void Move(int index, int delta)
+    {
+        var step = _edit!.Steps[index];
+        _edit.Steps.RemoveAt(index);
+        _edit.Steps.Insert(index + delta, step);
+    }
+
+    private async Task SaveAsync()
+    {
+        var edited = _edit!;
+        edited.Name = edited.Name.Trim();
+        edited.Faction = string.IsNullOrWhiteSpace(edited.Faction) ? null : edited.Faction.Trim();
+        edited.Tags = (_tags ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Distinct().ToList();
+        edited.Steps.RemoveAll(s => s.PaintId is null && string.IsNullOrWhiteSpace(s.PaintName) && string.IsNullOrWhiteSpace(s.Notes));
+        foreach (var step in edited.Steps.Where(s => s.PaintId is not null))
+            step.PaintName = null;
+
+        var wasNew = IsNew;
+        await RunAsync(async () =>
+        {
+            var (ok, error) = await Store.SaveAsync(c =>
+            {
+                var index = c.Recipes.FindIndex(r => r.Id == edited.Id);
+                if (index >= 0) c.Recipes[index] = edited;
+                else c.Recipes.Add(edited);
+                return true;
+            }, $"{(wasNew ? "Ajout" : "Modif")} recette : {edited.Name}");
+
+            if (!ok) { _error = error; return; }
+            _edit = null;
+            if (wasNew) Nav.NavigateTo($"recette/{edited.Id}", replace: true);
+        });
+    }
+
+    private async Task DuplicateAsync()
+    {
+        var copy = CollectionStore.Clone(Recipe!);
+        copy.Id = NewId.For("r");
+        copy.Name += " (copie)";
+        await RunAsync(async () =>
+        {
+            var (ok, error) = await Store.SaveAsync(c => { c.Recipes.Add(copy); return true; },
+                $"Ajout recette : {copy.Name}");
+            if (ok) Nav.NavigateTo($"recette/{copy.Id}");
+            else _error = error;
+        });
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", $"Supprimer la recette « {Recipe!.Name} » ?"))
+            return;
+        var id = Id;
+        var name = Recipe.Name;
+        await RunAsync(async () =>
+        {
+            var (ok, error) = await Store.SaveAsync(c =>
+            {
+                foreach (var mini in c.Miniatures) mini.RecipeIds.Remove(id);
+                return c.Recipes.RemoveAll(r => r.Id == id) > 0;
+            }, $"Suppression recette : {name}");
+            if (ok) Nav.NavigateTo("recettes");
+            else _error = error;
+        });
+    }
+
+    /// <summary>Texte brut de la recette, pour la partager (Discord, WhatsApp…).</summary>
+    private async Task CopyAsync()
+    {
+        var r = Recipe!;
+        var lines = new List<string> { $"🎨 {r.Name}" + (r.Faction is null ? "" : $" — {r.Faction}") };
+        if (!string.IsNullOrWhiteSpace(r.Description)) lines.Add(r.Description);
+        foreach (var area in r.Steps.GroupBy(s => string.IsNullOrWhiteSpace(s.Area) ? "Général" : s.Area))
+        {
+            lines.Add("");
+            lines.Add($"▸ {area.Key}");
+            lines.AddRange(area.Select(s => $"  • {s.Technique} : {Store.PaintLabel(s)}"
+                                            + (string.IsNullOrWhiteSpace(s.Notes) ? "" : $" ({s.Notes})")));
+        }
+        await JS.InvokeVoidAsync("hobby.copyText", string.Join("\n", lines));
+        _info = "📋 Recette copiée.";
+    }
+
+    private async Task RunAsync(Func<Task> action)
+    {
+        _busy = true; _error = null; _info = null;
+        try { await action(); }
+        finally { _busy = false; }
+    }
+
+    private void OnChanged() => InvokeAsync(StateHasChanged);
+    public void Dispose() => Store.Changed -= OnChanged;
+}

@@ -1,0 +1,99 @@
+@page "/"
+@implements IDisposable
+@inject CollectionStore Store
+
+<PageTitle>Hobby Warhammer</PageTitle>
+
+<header class="page-header">
+    <h1>Hobby Warhammer</h1>
+    @if (Store.Data is not null)
+    {
+        var total = Store.CountModels();
+        var done = Store.CountModels(m => m.Status >= MiniStatus.Painted);
+        var pct = total == 0 ? 0 : done * 100 / total;
+        <div class="header-sub">@total figurine(s) — @done peinte(s)</div>
+        <div class="progress"><div class="progress-bar" style="width:@(pct)%"></div></div>
+        <div class="header-sub small">@pct % de la collection peinte</div>
+    }
+</header>
+
+<SyncBanner />
+
+@if (Store.Data is null)
+{
+    <p class="muted">Chargement…</p>
+}
+else
+{
+    <section class="card">
+        <h2 class="card-title">Avancement</h2>
+        <div class="status-grid">
+            @foreach (var status in Labels.Statuses)
+            {
+                var count = Store.CountModels(m => m.Status == status);
+                <a class="status-tile @Labels.Css(status)" href="figurines?statut=@status">
+                    <span class="status-tile-icon">@Labels.Icon(status)</span>
+                    <span class="status-tile-count">@count</span>
+                    <span class="status-tile-label">@Labels.Of(status)</span>
+                </a>
+            }
+        </div>
+    </section>
+
+    var painting = Store.Data.Miniatures.Where(m => m.Status == MiniStatus.Painting).ToList();
+    @if (painting.Count > 0)
+    {
+        <section class="card">
+            <h2 class="card-title">🖌️ Sur la table</h2>
+            @foreach (var mini in painting)
+            {
+                <a class="list-row" href="figurine/@mini.Id">
+                    <span class="list-row-main">
+                        <b>@mini.Name</b>
+                        <small>@mini.Faction@(mini.Quantity > 1 ? $" · ×{mini.Quantity}" : "")</small>
+                    </span>
+                    <span class="list-row-arrow">›</span>
+                </a>
+            }
+        </section>
+    }
+
+    var shopping = Store.ShoppingList.ToList();
+    @if (shopping.Count > 0)
+    {
+        <section class="card">
+            <h2 class="card-title">🛒 À acheter pour tes recettes</h2>
+            <div class="chips">
+                @foreach (var paint in shopping)
+                {
+                    <span class="chip"><PaintSwatch Paint="paint" /> @paint.Name</span>
+                }
+            </div>
+            <a class="link-more" href="peintures?vue=courses">Voir la liste de courses ›</a>
+        </section>
+    }
+
+    <section class="card">
+        <h2 class="card-title">Accès rapide</h2>
+        <div class="quick-actions">
+            <a class="quick-action" href="figurine/nouvelle">➕ Figurine</a>
+            <a class="quick-action" href="recette/nouvelle">➕ Recette</a>
+            <a class="quick-action" href="peintures?ajout=1">➕ Peinture</a>
+        </div>
+        <p class="muted small">
+            @Store.Data.Recipes.Count recette(s) ·
+            @Store.Data.Paints.Count(p => p.Owned) / @Store.Data.Paints.Count peinture(s) possédée(s)
+        </p>
+    </section>
+}
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        Store.Changed += OnChanged;
+        await Store.EnsureLoadedAsync();
+    }
+
+    private void OnChanged() => InvokeAsync(StateHasChanged);
+    public void Dispose() => Store.Changed -= OnChanged;
+}
