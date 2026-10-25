@@ -1,4 +1,6 @@
-# Hobby Warhammer 🖌️
+# Figouz de la Honte 🖌️
+
+> La pile de la honte, enfin sous contrôle.
 
 Gestion de ma collection de figurines Warhammer : avancement de chaque figurine,
 recettes de peinture et inventaire des pots.
@@ -31,7 +33,7 @@ dans ce repo, [`data/collection.json`](data/collection.json).
 ## Token GitHub
 
 Pour modifier depuis l'app : GitHub → Settings → Developer settings → **Fine-grained tokens** →
-repo `warhammer-figurines` uniquement, permission **Contents : Read and write**.
+repo `figouz-de-la-honte` uniquement, permission **Contents : Read and write**.
 Le coller dans Réglages ; il reste stocké sur l'appareil (localStorage).
 
 ## Modèle de données (`data/collection.json`)
@@ -70,5 +72,5 @@ dotnet run --project WarhammerFigurines
 
 ## Déploiement
 
-Push sur `main` → GitHub Actions publie sur GitHub Pages (`/warhammer-figurines/`).
+Push sur `main` → GitHub Actions publie sur GitHub Pages (`/figouz-de-la-honte/`).
 Penser à incrémenter `AppInfo.Version`.

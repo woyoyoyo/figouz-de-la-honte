@@ -27,10 +27,10 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      # L'app est servie sous /warhammer-figurines/ : le base href doit être modifié
+      # L'app est servie sous /figouz-de-la-honte/ : le base href doit être modifié
       # AVANT le publish pour que les hash du Service Worker restent valides.
       - name: Ajuster le base href
-        run: sed -i 's|<base href="/" />|<base href="/warhammer-figurines/" />|' WarhammerFigurines/wwwroot/index.html
+        run: sed -i 's|<base href="/" />|<base href="/figouz-de-la-honte/" />|' WarhammerFigurines/wwwroot/index.html
 
       - name: Publish
         run: dotnet publish WarhammerFigurines/WarhammerFigurines.csproj -c Release -o publish

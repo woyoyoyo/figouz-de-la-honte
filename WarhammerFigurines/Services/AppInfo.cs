@@ -8,5 +8,5 @@ public static class AppInfo
 
     /// <summary>Repo lu par défaut (public : lecture sans token).</summary>
     public const string DefaultOwner = "woyoyoyo";
-    public const string DefaultRepo = "warhammer-figurines";
+    public const string DefaultRepo = "figouz-de-la-honte";
 }
