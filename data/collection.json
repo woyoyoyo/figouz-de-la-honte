@@ -704,6 +704,62 @@
       "type": "Technical",
       "hex": "#f0f0f0",
       "owned": false
+    },
+    {
+      "id": "p-ak-amethyst-blue",
+      "name": "Amethyst Blue",
+      "brand": "AK Interactive",
+      "type": "Air",
+      "hex": "#5b4a8b",
+      "owned": true
+    },
+    {
+      "id": "p-ak-pale-yellow",
+      "name": "Pale Yellow",
+      "brand": "AK Interactive",
+      "type": "Layer",
+      "hex": "#f1e3a1",
+      "owned": true
+    },
+    {
+      "id": "p-ak-medium-orange",
+      "name": "Medium Orange",
+      "brand": "AK Interactive",
+      "type": "Air",
+      "hex": "#e8772e",
+      "owned": true
+    },
+    {
+      "id": "p-ak-dark-green",
+      "name": "Dark Green",
+      "brand": "AK Interactive",
+      "type": "Base",
+      "hex": "#2f4a2c",
+      "owned": true
+    },
+    {
+      "id": "p-vallejo-warlord-purple",
+      "name": "Warlord Purple",
+      "brand": "Vallejo",
+      "type": "Layer",
+      "hex": "#8b1e4f",
+      "owned": true
+    },
+    {
+      "id": "p-vallejo-basic-skin-tone",
+      "name": "Basic Skin Tone",
+      "brand": "Vallejo",
+      "type": "Base",
+      "hex": "#e0a98a",
+      "owned": true
+    },
+    {
+      "id": "p-vallejo-light-flesh",
+      "name": "Light Flesh",
+      "brand": "Vallejo",
+      "type": "Layer",
+      "hex": "#f2c9a8",
+      "owned": true
     }
   ],
   "recipes": [
@@ -772,7 +828,80 @@
           "paintId": "p-terminatus-stone-dry"
         }
       ]
+    },
+    {
+      "id": "r-archers-sylvains",
+      "name": "Archers Sylvains",
+      "faction": "Elfes Sylvains",
+      "steps": [
+        {
+          "technique": "Sous-couche",
+          "paintName": "Noir"
+        },
+        {
+          "area": "Capes",
+          "technique": "Base",
+          "paintId": "p-ak-amethyst-blue",
+          "notes": "À l'aéro"
+        },
+        {
+          "area": "Capes",
+          "technique": "Éclaircissement",
+          "paintId": "p-ak-pale-yellow",
+          "notes": "Éclaircissement grossier"
+        },
+        {
+          "area": "Capes",
+          "technique": "Glacis",
+          "paintId": "p-ak-medium-orange",
+          "notes": "À l'aéro"
+        },
+        {
+          "area": "Capes",
+          "technique": "Lavis ciblé",
+          "paintId": "p-vallejo-warlord-purple",
+          "notes": "Assombrissement"
+        },
+        {
+          "area": "Capes",
+          "technique": "Éclaircissement",
+          "paintId": "p-ak-pale-yellow"
+        },
+        {
+          "area": "Tenues",
+          "technique": "Base",
+          "paintId": "p-ak-dark-green"
+        },
+        {
+          "area": "Tenues",
+          "technique": "Éclaircissement",
+          "paintId": "p-ak-pale-yellow"
+        },
+        {
+          "area": "Tenues",
+          "technique": "Lavis ciblé",
+          "paintId": "p-ak-amethyst-blue",
+          "notes": "Assombrissement"
+        },
+        {
+          "area": "Peau",
+          "technique": "Base",
+          "paintId": "p-vallejo-basic-skin-tone"
+        },
+        {
+          "area": "Peau",
+          "technique": "Éclaircissement",
+          "paintId": "p-vallejo-light-flesh"
+        }
+      ],
+      "tags": [
+        "aérographe",
+        "capes",
+        "orange",
+        "vert"
+      ]
     }
   ],
-  "miniatures": []
+  "miniatures": [],
+  "lastUpdated": "2026-10-25T11:56:26Z"
 }
