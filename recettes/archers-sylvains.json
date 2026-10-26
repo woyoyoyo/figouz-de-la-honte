@@ -1,0 +1,81 @@
+{
+  "name": "Archers Sylvains",
+  "faction": "Elfes Sylvains",
+  "tags": [
+    "aérographe",
+    "capes",
+    "orange",
+    "vert"
+  ],
+  "steps": [
+    {
+      "technique": "Sous-couche",
+      "paint": "Noir"
+    },
+    {
+      "area": "Capes",
+      "technique": "Base",
+      "paint": "AK Amethyst Blue",
+      "notes": "À l'aéro"
+    },
+    {
+      "area": "Capes",
+      "technique": "Éclaircissement",
+      "paint": "AK Pale Yellow",
+      "notes": "Éclaircissement grossier"
+    },
+    {
+      "area": "Capes",
+      "technique": "Glacis",
+      "paint": "AK Medium Orange",
+      "notes": "À l'aéro"
+    },
+    {
+      "area": "Capes",
+      "technique": "Assombrissement",
+      "paint": "Vallejo Warlord Purple"
+    },
+    {
+      "area": "Capes",
+      "technique": "Éclaircissement",
+      "paint": "AK Pale Yellow"
+    },
+    {
+      "area": "Capes",
+      "technique": "Effet",
+      "paint": "Blanc",
+      "notes": "Signes elfiques"
+    },
+    {
+      "area": "Capes",
+      "technique": "Couche",
+      "paint": "Vallejo Sunrise Blue",
+      "notes": "Sur le blanc des signes elfiques"
+    },
+    {
+      "area": "Tenues",
+      "technique": "Base",
+      "paint": "AK Dark Green"
+    },
+    {
+      "area": "Tenues",
+      "technique": "Éclaircissement",
+      "paint": "AK Pale Yellow"
+    },
+    {
+      "area": "Tenues",
+      "technique": "Assombrissement",
+      "paint": "AK Amethyst Blue"
+    },
+    {
+      "area": "Peau",
+      "technique": "Base",
+      "paint": "Vallejo Basic Skin Tone"
+    },
+    {
+      "area": "Peau",
+      "technique": "Éclaircissement",
+      "paint": "Vallejo Light Flesh"
+    }
+  ]
+}

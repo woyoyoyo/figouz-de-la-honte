@@ -12,11 +12,13 @@ public enum DataSource
     Cache
 }
 
+/// <summary>Copie locale d'un fichier du repo (cache hors-ligne, réutilisée tant que le SHA ne change pas).</summary>
+public record CachedFile(string Sha, string Content);
+
 /// <summary>
-/// Source unique des données pour l'UI.
-/// Lecture : API GitHub (copie en cache localStorage) → hors-ligne : cache.
-/// Écriture : relit toujours la dernière version, applique la modification,
-/// puis commit avec le SHA lu (rejoue une fois si le fichier a bougé entre-temps).
+/// Source unique des données pour l'UI : un fichier JSON par recette (recettes/)
+/// et par figurine (figurines/). Pas de base : le nom du fichier est l'identifiant.
+/// Lecture : GitHub → cache localStorage (hors-ligne). Écriture : un commit par fichier modifié.
 /// </summary>
 public class CollectionStore(
     RepoFileService repo,
@@ -24,11 +26,20 @@ public class CollectionStore(
     LocalStorageService storage,
     IJSRuntime js)
 {
-    private const string CacheKey = "wh.cache";
-    private const string CacheDateKey = "wh.cacheDate";
+    private const string CacheKey = "wh.files";
+    private const string CacheDateKey = "wh.filesDate";
 
-    public Collection? Data { get; private set; }
+    private Dictionary<string, CachedFile> _files = [];
+
+    public List<Recipe> Recipes { get; private set; } = [];
+    public List<Miniature> Miniatures { get; private set; } = [];
+    public bool Loaded { get; private set; }
+
     public string? LoadError { get; private set; }
+
+    /// <summary>Fichiers illisibles (JSON invalide après une modif à la main).</summary>
+    public List<string> BrokenFiles { get; } = [];
+
     public DataSource Source { get; private set; } = DataSource.None;
     public DateTimeOffset? LastSync { get; private set; }
 
@@ -38,7 +49,7 @@ public class CollectionStore(
 
     public async Task EnsureLoadedAsync()
     {
-        if (Data is null)
+        if (!Loaded)
             await ReloadAsync();
     }
 
@@ -51,12 +62,9 @@ public class CollectionStore(
         {
             try
             {
-                var file = await repo.LoadAsync(settings.Target, settings.Token);
-                var content = file?.Content ?? "";
-                Data = Deserialize(content) ?? new Collection();
+                await LoadFromGitHubAsync();
                 Source = DataSource.GitHub;
-                await StoreCacheAsync(content);
-                Changed?.Invoke();
+                Done();
                 return;
             }
             catch (Exception ex)
@@ -66,89 +74,185 @@ public class CollectionStore(
         }
 
         if (await LoadFromCacheAsync())
+            Source = DataSource.Cache;
+        Done();
+
+        void Done()
         {
+            Loaded = true;
             Changed?.Invoke();
-            return;
+        }
+    }
+
+    private async Task LoadFromGitHubAsync()
+    {
+        var t = settings.Target;
+        var head = await repo.GetHeadAsync(t, settings.Token);
+        var entries = (await repo.ListAsync(t, head, settings.Token)).Where(IsDataFile).ToList();
+
+        var old = _files.Count > 0 ? _files : await ReadCacheAsync();
+        var contents = await Task.WhenAll(entries.Select(async e =>
+            old.TryGetValue(e.Path, out var c) && c.Sha == e.Sha
+                ? c.Content
+                : await repo.ReadAsync(t, head, e, settings.Token)));
+
+        _files = entries.Zip(contents).ToDictionary(x => x.First.Path, x => new CachedFile(x.First.Sha, x.Second));
+        Parse();
+        await SaveCacheAsync();
+    }
+
+    private static bool IsDataFile(RepoEntry e) =>
+        e.Path.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
+        && (e.Path.StartsWith(Recipe.Folder + "/") || e.Path.StartsWith(Miniature.Folder + "/"))
+        && e.Path.Count(c => c == '/') == 1;
+
+    private void Parse()
+    {
+        BrokenFiles.Clear();
+        Recipes = ParseFolder<Recipe>(Recipe.Folder).OrderBy(r => r.Name).ToList();
+        Miniatures = ParseFolder<Miniature>(Miniature.Folder).OrderBy(m => m.Name).ToList();
+    }
+
+    private IEnumerable<T> ParseFolder<T>(string folder) where T : RepoItem
+    {
+        foreach (var (path, file) in _files.Where(f => f.Key.StartsWith(folder + "/")))
+        {
+            T? item = null;
+            try { item = JsonSerializer.Deserialize<T>(file.Content, RepoFileService.JsonOpts); }
+            catch (JsonException) { }
+
+            if (item is null)
+            {
+                BrokenFiles.Add(path);
+                continue;
+            }
+            item.Slug = Path.GetFileNameWithoutExtension(path);
+            item.Sha = file.Sha;
+            yield return item;
+        }
+    }
+
+    // ── Écriture ─────────────────────────────────────────────────────────
+
+    /// <summary>Crée ou remplace le fichier de la recette (Slug vide = nouvelle recette).</summary>
+    public Task<(bool Ok, string? Error)> SaveAsync(Recipe recipe, string message) =>
+        SaveItemAsync(recipe, Recipe.Folder, Recipes, message);
+
+    public Task<(bool Ok, string? Error)> SaveAsync(Miniature mini, string message) =>
+        SaveItemAsync(mini, Miniature.Folder, Miniatures, message);
+
+    public Task<(bool Ok, string? Error)> DeleteAsync(Recipe recipe) =>
+        DeleteItemAsync(recipe, Recipe.Folder, Recipes, $"Suppression recette : {recipe.Name}");
+
+    public Task<(bool Ok, string? Error)> DeleteAsync(Miniature mini) =>
+        DeleteItemAsync(mini, Miniature.Folder, Miniatures, $"Suppression figurine : {mini.Name}");
+
+    private async Task<(bool Ok, string? Error)> SaveItemAsync<T>(T item, string folder, List<T> list, string message)
+        where T : RepoItem
+    {
+        if (await CheckWritableAsync() is { } error)
+            return (false, error);
+
+        if (string.IsNullOrEmpty(item.Slug))
+            item.Slug = Slug.Unique(NameOf(item), list.Select(x => x.Slug).Append("nouvelle")); // « nouvelle » = route de création
+
+        var path = $"{folder}/{item.Slug}.json";
+        var json = JsonSerializer.Serialize(item, RepoFileService.JsonOpts) + "\n";
+        try
+        {
+            item.Sha = await repo.WriteAsync(settings.Target, settings.Token!, path, json, item.Sha, message);
+        }
+        catch (Exception ex)
+        {
+            return (false, ex.Message);
         }
 
-        Data ??= new Collection();
+        _files[path] = new CachedFile(item.Sha, json);
+        list.RemoveAll(x => x.Slug == item.Slug);
+        list.Add(item);
+        await AfterWriteAsync();
+        return (true, null);
+    }
+
+    private async Task<(bool Ok, string? Error)> DeleteItemAsync<T>(T item, string folder, List<T> list, string message)
+        where T : RepoItem
+    {
+        if (await CheckWritableAsync() is { } error)
+            return (false, error);
+
+        var path = $"{folder}/{item.Slug}.json";
+        try
+        {
+            await repo.DeleteAsync(settings.Target, settings.Token!, path, item.Sha!, message);
+        }
+        catch (Exception ex)
+        {
+            return (false, ex.Message);
+        }
+
+        _files.Remove(path);
+        list.RemoveAll(x => x.Slug == item.Slug);
+        await AfterWriteAsync();
+        return (true, null);
+    }
+
+    private async Task<string?> CheckWritableAsync()
+    {
+        await settings.EnsureLoadedAsync();
+        if (!settings.CanSave)
+            return "Token GitHub manquant — configure-le dans Réglages.";
+        if (!await IsOnlineAsync())
+            return "Hors ligne — modification impossible sans réseau.";
+        return null;
+    }
+
+    private async Task AfterWriteAsync()
+    {
+        Recipes = Recipes.OrderBy(r => r.Name).ToList();
+        Miniatures = Miniatures.OrderBy(m => m.Name).ToList();
+        await SaveCacheAsync();
         Changed?.Invoke();
     }
 
-    /// <param name="applyChange">Modification à appliquer sur les données fraîches.
-    /// Retourne false pour annuler (ex : élément introuvable).</param>
-    /// <param name="message">Message du commit.</param>
-    public async Task<(bool Ok, string? Error)> SaveAsync(Func<Collection, bool> applyChange, string message)
+    private static string NameOf(RepoItem item) => item switch
     {
-        await settings.EnsureLoadedAsync();
+        Recipe r => r.Name,
+        Miniature m => m.Name,
+        _ => "sans-nom"
+    };
 
-        if (!settings.CanSave)
-            return (false, "Token GitHub manquant — configure-le dans Paramètres.");
-        if (!await IsOnlineAsync())
-            return (false, "Hors ligne — modification impossible sans réseau.");
+    // ── Cache localStorage ───────────────────────────────────────────────
 
-        for (var attempt = 0; ; attempt++)
-        {
-            try
-            {
-                var file = await repo.LoadAsync(settings.Target, settings.Token);
-                var fresh = (file is null ? null : Deserialize(file.Content)) ?? new Collection();
-
-                if (!applyChange(fresh))
-                    return (false, "Modification impossible sur la dernière version des données.");
-
-                fresh.LastUpdated = DateTime.UtcNow;
-                var json = JsonSerializer.Serialize(fresh, RepoFileService.JsonOpts) + "\n";
-                await repo.SaveAsync(settings.Target, settings.Token!, json, file?.Sha, message);
-
-                Data = fresh;
-                Source = DataSource.GitHub;
-                await StoreCacheAsync(json);
-                Changed?.Invoke();
-                return (true, null);
-            }
-            catch (ConflictException) when (attempt == 0)
-            {
-                // Quelqu'un a commité entre notre lecture et notre écriture : on rejoue.
-            }
-            catch (Exception ex)
-            {
-                return (false, ex.Message);
-            }
-        }
-    }
-
-    private async Task StoreCacheAsync(string content)
+    private async Task SaveCacheAsync()
     {
         LastSync = DateTimeOffset.Now;
-        await storage.SetAsync(CacheKey, content);
+        await storage.SetAsync(CacheKey, JsonSerializer.Serialize(_files));
         await storage.SetAsync(CacheDateKey, LastSync.Value.ToString("O"));
+    }
+
+    private async Task<Dictionary<string, CachedFile>> ReadCacheAsync()
+    {
+        try
+        {
+            var raw = await storage.GetAsync(CacheKey);
+            return string.IsNullOrWhiteSpace(raw) ? [] : JsonSerializer.Deserialize<Dictionary<string, CachedFile>>(raw) ?? [];
+        }
+        catch
+        {
+            return [];
+        }
     }
 
     private async Task<bool> LoadFromCacheAsync()
     {
-        try
-        {
-            var cached = await storage.GetAsync(CacheKey);
-            if (string.IsNullOrWhiteSpace(cached))
-                return false;
-
-            Data = Deserialize(cached);
-            Source = DataSource.Cache;
-            var cachedDate = await storage.GetAsync(CacheDateKey);
-            LastSync = DateTimeOffset.TryParse(cachedDate, out var d) ? d : null;
-            return Data is not null;
-        }
-        catch
-        {
+        _files = await ReadCacheAsync();
+        if (_files.Count == 0)
             return false;
-        }
+        Parse();
+        var cachedDate = await storage.GetAsync(CacheDateKey);
+        LastSync = DateTimeOffset.TryParse(cachedDate, out var d) ? d : null;
+        return true;
     }
-
-    private static Collection? Deserialize(string content) =>
-        string.IsNullOrWhiteSpace(content)
-            ? null
-            : JsonSerializer.Deserialize<Collection>(content, RepoFileService.JsonOpts);
 
     public async Task<bool> IsOnlineAsync()
     {
@@ -164,39 +268,23 @@ public class CollectionStore(
 
     // ── Requêtes pour l'UI ───────────────────────────────────────────────
 
-    public Paint? PaintById(string? id) =>
-        id is null ? null : Data?.Paints.FirstOrDefault(p => p.Id == id);
+    public Recipe? RecipeBySlug(string? slug) => Recipes.FirstOrDefault(r => r.Slug == slug);
 
-    public Recipe? RecipeById(string? id) =>
-        id is null ? null : Data?.Recipes.FirstOrDefault(r => r.Id == id);
+    public Miniature? MiniatureBySlug(string? slug) => Miniatures.FirstOrDefault(m => m.Slug == slug);
 
-    public Miniature? MiniatureById(string? id) =>
-        id is null ? null : Data?.Miniatures.FirstOrDefault(m => m.Id == id);
+    public IEnumerable<Miniature> MiniaturesUsing(string recipeSlug) =>
+        Miniatures.Where(m => m.Recipes.Contains(recipeSlug));
 
-    /// <summary>Nom affiché de la peinture d'une étape (catalogue ou texte libre).</summary>
-    public string PaintLabel(RecipeStep step) =>
-        PaintById(step.PaintId)?.Name ?? step.PaintName ?? "—";
-
-    public IEnumerable<Recipe> RecipesUsing(string paintId) =>
-        Data?.Recipes.Where(r => r.Steps.Any(s => s.PaintId == paintId)) ?? [];
-
-    public IEnumerable<Miniature> MiniaturesUsing(string recipeId) =>
-        Data?.Miniatures.Where(m => m.RecipeIds.Contains(recipeId)) ?? [];
-
-    /// <summary>Peintures utilisées par une recette mais pas possédées.</summary>
-    public IEnumerable<Paint> MissingPaints(Recipe recipe) =>
-        recipe.Steps
-            .Select(s => PaintById(s.PaintId))
-            .Where(p => p is { Owned: false })
-            .DistinctBy(p => p!.Id)!;
-
-    /// <summary>Liste de courses : peintures non possédées utilisées par au moins une recette.</summary>
-    public IEnumerable<Paint> ShoppingList =>
-        (Data?.Recipes ?? []).SelectMany(MissingPaints).DistinctBy(p => p.Id).OrderBy(p => p.Name);
+    /// <summary>Toutes les peintures citées dans les recettes, avec les recettes qui les utilisent.</summary>
+    public IEnumerable<(string Paint, List<Recipe> Recipes)> PaintsUsed =>
+        Recipes.SelectMany(r => r.Steps.Select(s => (Paint: s.Paint.Trim(), Recipe: r)))
+            .Where(x => x.Paint.Length > 0)
+            .GroupBy(x => x.Paint, StringComparer.OrdinalIgnoreCase)
+            .Select(g => (g.First().Paint, g.Select(x => x.Recipe).DistinctBy(r => r.Slug).ToList()))
+            .OrderBy(x => x.Item1, StringComparer.OrdinalIgnoreCase);
 
     public IEnumerable<string> Factions =>
-        (Data?.Miniatures.Select(m => m.Faction) ?? [])
-            .Concat(Data?.Recipes.Select(r => r.Faction) ?? [])
+        Miniatures.Select(m => m.Faction).Concat(Recipes.Select(r => r.Faction))
             .Where(f => !string.IsNullOrWhiteSpace(f))
             .Select(f => f!.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -204,9 +292,14 @@ public class CollectionStore(
 
     /// <summary>Nombre total de figurines (en tenant compte des quantités).</summary>
     public int CountModels(Func<Miniature, bool>? filter = null) =>
-        Data?.Miniatures.Where(filter ?? (_ => true)).Sum(m => m.Quantity) ?? 0;
+        Miniatures.Where(filter ?? (_ => true)).Sum(m => m.Quantity);
 
-    /// <summary>Copie profonde, pour éditer sans toucher aux données affichées.</summary>
-    public static T Clone<T>(T value) =>
-        JsonSerializer.Deserialize<T>(JsonSerializer.Serialize(value, RepoFileService.JsonOpts), RepoFileService.JsonOpts)!;
+    /// <summary>Copie profonde (slug et SHA compris), pour éditer sans toucher aux données affichées.</summary>
+    public static T Clone<T>(T value) where T : RepoItem
+    {
+        var copy = JsonSerializer.Deserialize<T>(JsonSerializer.Serialize(value, RepoFileService.JsonOpts), RepoFileService.JsonOpts)!;
+        copy.Slug = value.Slug;
+        copy.Sha = value.Sha;
+        return copy;
+    }
 }

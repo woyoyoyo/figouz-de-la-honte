@@ -6,13 +6,13 @@
 
 <header class="page-header">
     <h1>📜 Recettes</h1>
-    <div class="header-sub">@(Store.Data?.Recipes.Count ?? 0) recette(s) de peinture</div>
+    <div class="header-sub">@Store.Recipes.Count recette(s) de peinture</div>
 </header>
 
 <SyncBanner />
 
 <div class="filters">
-    <input class="form-input" type="search" placeholder="🔍 Nom, tag, peinture…" @bind="_search" @bind:event="oninput" />
+    <input class="form-input" type="search" placeholder="🔍 Nom, zone, peinture…" @bind="_search" @bind:event="oninput" />
 </div>
 
 @if (Store.CanEdit)
@@ -20,13 +20,13 @@
     <a class="action-btn btn-primary" href="recette/nouvelle">➕ Nouvelle recette</a>
 }
 
-@if (Store.Data is null)
+@if (!Store.Loaded)
 {
     <p class="muted">Chargement…</p>
 }
 else if (!Filtered.Any())
 {
-    <p class="empty">Aucune recette@(Store.Data.Recipes.Count > 0 ? " pour cette recherche" : " pour l'instant").</p>
+    <p class="empty">Aucune recette@(Store.Recipes.Count > 0 ? " pour cette recherche" : " pour l'instant").</p>
 }
 else
 {
@@ -34,22 +34,16 @@ else
     {
         <section class="card">
             <h2 class="card-title">@group.Key</h2>
-            @foreach (var recipe in group.OrderBy(r => r.Name))
+            @foreach (var recipe in group)
             {
-                var missing = Store.MissingPaints(recipe).Count();
-                <a class="list-row" href="recette/@recipe.Id">
+                <a class="list-row" href="recette/@recipe.Slug">
                     <span class="list-row-main">
                         <b>@recipe.Name</b>
                         <small>
                             @recipe.Steps.Count étape(s)
-                            @if (missing > 0) { <span class="warn-text"> · 🛒 @missing à acheter</span> }
+                            @{ var areas = Areas(recipe); }
+                            @if (areas.Length > 0) { <text> · @areas</text> }
                         </small>
-                        <span class="swatch-row">
-                            @foreach (var step in recipe.Steps)
-                            {
-                                <PaintSwatch Paint="Store.PaintById(step.PaintId)" />
-                            }
-                        </span>
                     </span>
                     <span class="list-row-arrow">›</span>
                 </a>
@@ -61,8 +55,10 @@ else
 @code {
     private string? _search;
 
-    private IEnumerable<Recipe> Filtered =>
-        (Store.Data?.Recipes ?? []).Where(Matches);
+    private IEnumerable<Recipe> Filtered => Store.Recipes.Where(Matches);
+
+    private static string Areas(Recipe r) =>
+        string.Join(", ", r.Steps.Select(s => s.Area).Where(a => !string.IsNullOrWhiteSpace(a)).Distinct());
 
     private bool Matches(Recipe r)
     {
@@ -72,7 +68,7 @@ else
         return r.Name.Contains(q, StringComparison.OrdinalIgnoreCase)
             || (r.Faction?.Contains(q, StringComparison.OrdinalIgnoreCase) ?? false)
             || r.Tags.Any(t => t.Contains(q, StringComparison.OrdinalIgnoreCase))
-            || r.Steps.Any(s => Store.PaintLabel(s).Contains(q, StringComparison.OrdinalIgnoreCase)
+            || r.Steps.Any(s => s.Paint.Contains(q, StringComparison.OrdinalIgnoreCase)
                                 || (s.Area?.Contains(q, StringComparison.OrdinalIgnoreCase) ?? false));
     }
 

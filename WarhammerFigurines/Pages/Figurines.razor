@@ -36,13 +36,13 @@
     <a class="action-btn btn-primary" href="figurine/nouvelle">➕ Ajouter une figurine</a>
 }
 
-@if (Store.Data is null)
+@if (!Store.Loaded)
 {
     <p class="muted">Chargement…</p>
 }
 else if (!Filtered.Any())
 {
-    <p class="empty">Aucune figurine@(Store.Data.Miniatures.Count > 0 ? " pour ces filtres" : " pour l'instant").</p>
+    <p class="empty">Aucune figurine@(Store.Miniatures.Count > 0 ? " pour ces filtres" : " pour l'instant").</p>
 }
 else
 {
@@ -52,7 +52,7 @@ else
             <h2 class="card-title">@group.Key <small>(@group.Sum(m => m.Quantity))</small></h2>
             @foreach (var mini in group.OrderBy(m => m.Status).ThenBy(m => m.Name))
             {
-                <a class="list-row" href="figurine/@mini.Id">
+                <a class="list-row" href="figurine/@mini.Slug">
                     <span class="list-row-main">
                         <b>@mini.Name @(mini.Quantity > 1 ? $"×{mini.Quantity}" : "")</b>
                         <small>@mini.Game</small>
@@ -73,7 +73,7 @@ else
     private string? _faction;
 
     private IEnumerable<Miniature> Filtered =>
-        (Store.Data?.Miniatures ?? [])
+        Store.Miniatures
             .Where(m => string.IsNullOrEmpty(_faction) || string.Equals(m.Faction?.Trim(), _faction, StringComparison.OrdinalIgnoreCase))
             .Where(m => string.IsNullOrEmpty(Statut) || m.Status.ToString() == Statut)
             .Where(m => string.IsNullOrWhiteSpace(_search)

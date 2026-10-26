@@ -17,7 +17,7 @@
     <div class="card form">
         <label class="form-field">
             <span class="form-label">Nom *</span>
-            <input class="form-input" @bind="_edit.Name" placeholder="ex : Intercessors" />
+            <input class="form-input" @bind="_edit.Name" placeholder="ex : Archers sylvains" />
         </label>
         <label class="form-field">
             <span class="form-label">Jeu</span>
@@ -25,7 +25,7 @@
         </label>
         <label class="form-field">
             <span class="form-label">Faction</span>
-            <input class="form-input" @bind="_edit.Faction" list="factions" placeholder="ex : Ultramarines" />
+            <input class="form-input" @bind="_edit.Faction" list="factions" placeholder="ex : Elfes Sylvains" />
         </label>
         <div class="filters-row">
             <label class="form-field">
@@ -45,18 +45,18 @@
 
         <div class="form-field">
             <span class="form-label">Recettes utilisées</span>
-            @if (Store.Data?.Recipes.Count is 0 or null)
+            @if (Store.Recipes.Count == 0)
             {
                 <span class="form-hint">Aucune recette pour l'instant.</span>
             }
             else
             {
                 <div class="check-list">
-                    @foreach (var recipe in Store.Data!.Recipes.OrderBy(r => r.Name))
+                    @foreach (var recipe in Store.Recipes)
                     {
                         <label class="check-item">
-                            <input type="checkbox" checked="@_edit.RecipeIds.Contains(recipe.Id)"
-                                   @onchange="e => ToggleRecipe(recipe.Id, (bool)e.Value!)" />
+                            <input type="checkbox" checked="@_edit.Recipes.Contains(recipe.Slug)"
+                                   @onchange="e => ToggleRecipe(recipe.Slug, (bool)e.Value!)" />
                             @recipe.Name <small class="muted">@recipe.Faction</small>
                         </label>
                     }
@@ -85,7 +85,7 @@
     <Suggestions Id="games" Values="Labels.Games" />
     <Suggestions Id="factions" Values="Store.Factions" />
 }
-else if (Store.Data is null)
+else if (!Store.Loaded)
 {
     <p class="muted">Chargement…</p>
 }
@@ -125,24 +125,27 @@ else
 
     <section class="card">
         <h2 class="card-title">📜 Recettes</h2>
-        @if (Mini.RecipeIds.Count == 0)
+        @if (Mini.Recipes.Count == 0)
         {
             <p class="muted">Aucune recette associée.</p>
         }
-        @foreach (var recipe in Mini.RecipeIds.Select(Store.RecipeById).Where(r => r is not null))
+        @foreach (var slug in Mini.Recipes)
         {
-            <a class="list-row" href="recette/@recipe!.Id">
-                <span class="list-row-main">
-                    <b>@recipe.Name</b>
-                    <small>@recipe.Steps.Count étape(s)</small>
-                </span>
-                <span class="swatch-row">
-                    @foreach (var step in recipe.Steps.Take(6))
-                    {
-                        <PaintSwatch Paint="Store.PaintById(step.PaintId)" />
-                    }
-                </span>
-            </a>
+            var recipe = Store.RecipeBySlug(slug);
+            @if (recipe is null)
+            {
+                <div class="list-row"><span class="list-row-main"><small class="muted">Recette « @slug » introuvable</small></span></div>
+            }
+            else
+            {
+                <a class="list-row" href="recette/@recipe.Slug">
+                    <span class="list-row-main">
+                        <b>@recipe.Name</b>
+                        <small>@recipe.Steps.Count étape(s)</small>
+                    </span>
+                    <span class="list-row-arrow">›</span>
+                </a>
+            }
         }
     </section>
 
@@ -167,7 +170,7 @@ else
     [Parameter] public string Id { get; set; } = "";
 
     private bool IsNew => Id == "nouvelle";
-    private Miniature? Mini => Store.MiniatureById(Id);
+    private Miniature? Mini => Store.MiniatureBySlug(Id);
 
     private Miniature? _edit;
     private bool _busy;
@@ -193,46 +196,36 @@ else
         else _edit = null;
     }
 
-    private void ToggleRecipe(string recipeId, bool on)
+    private void ToggleRecipe(string slug, bool on)
     {
-        _edit!.RecipeIds.Remove(recipeId);
-        if (on) _edit.RecipeIds.Add(recipeId);
+        _edit!.Recipes.Remove(slug);
+        if (on) _edit.Recipes.Add(slug);
     }
 
     private async Task SaveAsync()
     {
         var edited = _edit!;
         edited.Name = edited.Name.Trim();
-        edited.Faction = edited.Faction?.Trim();
+        edited.Faction = string.IsNullOrWhiteSpace(edited.Faction) ? null : edited.Faction.Trim();
+        edited.Notes = string.IsNullOrWhiteSpace(edited.Notes) ? null : edited.Notes;
+        edited.PhotoUrl = string.IsNullOrWhiteSpace(edited.PhotoUrl) ? null : edited.PhotoUrl.Trim();
         edited.Quantity = Math.Max(1, edited.Quantity);
 
         var wasNew = IsNew;
         await RunAsync(async () =>
         {
-            var (ok, error) = await Store.SaveAsync(c =>
-            {
-                var index = c.Miniatures.FindIndex(m => m.Id == edited.Id);
-                if (index >= 0) c.Miniatures[index] = edited;
-                else c.Miniatures.Add(edited);
-                return true;
-            }, $"{(wasNew ? "Ajout" : "Modif")} figurine : {edited.Name}");
-
+            var (ok, error) = await Store.SaveAsync(edited, $"{(wasNew ? "Ajout" : "Modif")} figurine : {edited.Name}");
             if (!ok) { _error = error; return; }
             _edit = null;
-            if (wasNew) Nav.NavigateTo($"figurine/{edited.Id}", replace: true);
+            if (wasNew) Nav.NavigateTo($"figurine/{edited.Slug}", replace: true);
         });
     }
 
     private Task SetStatusAsync(MiniStatus status) => RunAsync(async () =>
     {
-        var id = Id;
-        var (ok, error) = await Store.SaveAsync(c =>
-        {
-            var mini = c.Miniatures.FirstOrDefault(m => m.Id == id);
-            if (mini is null) return false;
-            mini.Status = status;
-            return true;
-        }, $"{Mini!.Name} → {Labels.Of(status)}");
+        var copy = CollectionStore.Clone(Mini!);
+        copy.Status = status;
+        var (ok, error) = await Store.SaveAsync(copy, $"{copy.Name} → {Labels.Of(status)}");
         if (!ok) _error = error;
     });
 
@@ -240,12 +233,9 @@ else
     {
         if (!await JS.InvokeAsync<bool>("confirm", $"Supprimer « {Mini!.Name} » ?"))
             return;
-        var id = Id;
-        var name = Mini.Name;
         await RunAsync(async () =>
         {
-            var (ok, error) = await Store.SaveAsync(c => c.Miniatures.RemoveAll(m => m.Id == id) > 0,
-                $"Suppression figurine : {name}");
+            var (ok, error) = await Store.DeleteAsync(Mini!);
             if (ok) Nav.NavigateTo("figurines");
             else _error = error;
         });

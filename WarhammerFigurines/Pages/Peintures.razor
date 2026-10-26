@@ -1,281 +1,65 @@
 @page "/peintures"
 @implements IDisposable
 @inject CollectionStore Store
-@inject IJSRuntime JS
 
 <PageTitle>Peintures — Figouz de la Honte</PageTitle>
 
 <header class="page-header">
     <h1>🎨 Peintures</h1>
-    <div class="header-sub">
-        @(Store.Data?.Paints.Count(p => p.Owned) ?? 0) possédée(s) sur @(Store.Data?.Paints.Count ?? 0) au catalogue
-    </div>
+    <div class="header-sub">@Store.PaintsUsed.Count() peinture(s) citée(s) dans tes recettes</div>
 </header>
 
 <SyncBanner />
 
-<div class="tabs">
-    <button class="tab @(_shopping ? "" : "tab-active")" @onclick="() => _shopping = false">Catalogue</button>
-    <button class="tab @(_shopping ? "tab-active" : "")" @onclick="() => _shopping = true">
-        🛒 Courses (@Store.ShoppingList.Count())
-    </button>
+<div class="filters">
+    <input class="form-input" type="search" placeholder="🔍 Rechercher une peinture…" @bind="_search" @bind:event="oninput" />
 </div>
 
-@if (_error is not null) { <div class="sync-status sync-warn">⚠️ @_error</div> }
-
-@if (_edit is not null)
-{
-    <div class="card form" id="paint-form">
-        <h2 class="card-title">@(_editIsNew ? "➕ Nouvelle peinture" : "✏️ Modifier la peinture")</h2>
-        <label class="form-field">
-            <span class="form-label">Nom *</span>
-            <input class="form-input" @bind="_edit.Name" placeholder="ex : Macragge Blue" />
-        </label>
-        <div class="filters-row">
-            <label class="form-field">
-                <span class="form-label">Marque</span>
-                <input class="form-input" @bind="_edit.Brand" list="brands" />
-            </label>
-            <label class="form-field">
-                <span class="form-label">Type</span>
-                <input class="form-input" @bind="_edit.Type" list="paint-types" />
-            </label>
-        </div>
-        <div class="filters-row">
-            <label class="form-field">
-                <span class="form-label">Couleur</span>
-                <input class="form-input color-input" type="color" @bind="_edit.Hex" />
-            </label>
-            <label class="check-item check-inline">
-                <input type="checkbox" @bind="_edit.Owned" /> Je l'ai
-            </label>
-        </div>
-        <label class="form-field">
-            <span class="form-label">Notes</span>
-            <input class="form-input" @bind="_edit.Notes" placeholder="ex : pot presque vide" />
-        </label>
-        <div class="form-actions">
-            <button class="action-btn btn-primary" @onclick="SaveEditAsync" disabled="@(_busy || string.IsNullOrWhiteSpace(_edit.Name))">
-                @(_busy ? "⏳…" : "💾 Enregistrer")
-            </button>
-            <button class="action-btn" @onclick="() => _edit = null" disabled="@_busy">Annuler</button>
-            @if (!_editIsNew)
-            {
-                <button class="action-btn btn-danger" @onclick="DeleteAsync" disabled="@_busy">🗑️</button>
-            }
-        </div>
-        @if (!_editIsNew && Store.RecipesUsing(_edit.Id).Any())
-        {
-            <p class="form-hint">Utilisée dans : @string.Join(", ", Store.RecipesUsing(_edit.Id).Select(r => r.Name))</p>
-        }
-    </div>
-    <Suggestions Id="brands" Values="Labels.Brands" />
-    <Suggestions Id="paint-types" Values="Labels.PaintTypes" />
-}
-
-@if (Store.Data is null)
+@if (!Store.Loaded)
 {
     <p class="muted">Chargement…</p>
 }
-else if (_shopping)
+else if (!Filtered.Any())
 {
-    var list = Store.ShoppingList.ToList();
-    @if (list.Count == 0)
-    {
-        <p class="empty">Rien à acheter : tu as toutes les peintures de tes recettes 💪</p>
-    }
-    else
-    {
-        <section class="card">
-            <p class="form-hint">Peintures utilisées dans tes recettes que tu n'as pas. Coche quand c'est acheté.</p>
-            @foreach (var paint in list)
-            {
-                <div class="paint-row">
-                    <PaintSwatch Paint="paint" Large="true" />
-                    <span class="list-row-main">
-                        <b>@paint.Name</b>
-                        <small>@paint.Brand @paint.Type · @string.Join(", ", Store.RecipesUsing(paint.Id).Select(r => r.Name))</small>
-                    </span>
-                    <button class="owned-toggle" disabled="@(!Store.CanEdit || _busy)" @onclick="() => ToggleOwnedAsync(paint)">⬜</button>
-                </div>
-            }
-            <button class="action-btn" @onclick="CopyShoppingAsync">📋 Copier la liste</button>
-        </section>
-    }
+    <p class="empty">Aucune peinture@(Store.Recipes.Count > 0 ? " pour cette recherche" : " : ajoute une recette").</p>
 }
 else
 {
-    <div class="filters">
-        <input class="form-input" type="search" placeholder="🔍 Rechercher…" @bind="_search" @bind:event="oninput" />
-        <div class="filters-row">
-            <select class="form-input" @bind="_type">
-                <option value="">Tous types</option>
-                @foreach (var type in Store.Data.Paints.Select(p => p.Type).Distinct().Order())
-                {
-                    <option value="@type">@type</option>
-                }
-            </select>
-            <select class="form-input" @bind="_ownedFilter">
-                <option value="">Toutes</option>
-                <option value="owned">Possédées</option>
-                <option value="missing">Pas possédées</option>
-            </select>
-        </div>
-    </div>
-
-    @if (Store.CanEdit && _edit is null)
-    {
-        <button class="action-btn btn-primary" @onclick="StartAdd">➕ Ajouter une peinture</button>
-    }
-
-    @foreach (var group in Filtered.GroupBy(p => p.Type).OrderBy(g => TypeOrder(g.Key)))
+    @foreach (var brand in Filtered.GroupBy(p => Labels.BrandOf(p.Paint)).OrderBy(g => g.Key == "Autres").ThenBy(g => g.Key))
     {
         <section class="card">
-            <h2 class="card-title">@group.Key <small>(@group.Count(p => p.Owned)/@group.Count())</small></h2>
-            @foreach (var paint in group.OrderBy(p => p.Name))
+            <h2 class="card-title">@brand.Key <small>(@brand.Count())</small></h2>
+            @foreach (var (paint, recipes) in brand)
             {
-                <div class="paint-row @(paint.Owned ? "" : "paint-missing")">
-                    <PaintSwatch Paint="paint" Large="true" />
-                    <span class="list-row-main" @onclick="() => StartEdit(paint)">
-                        <b>@paint.Name</b>
-                        <small>@paint.Brand@(string.IsNullOrWhiteSpace(paint.Notes) ? "" : $" · {paint.Notes}")</small>
+                <div class="list-row">
+                    <span class="list-row-main">
+                        <b>@paint</b>
+                        <small>
+                            @for (var i = 0; i < recipes.Count; i++)
+                            {
+                                var recipe = recipes[i];
+                                @(i > 0 ? ", " : "")<a href="recette/@recipe.Slug">@recipe.Name</a>
+                            }
+                        </small>
                     </span>
-                    <button class="owned-toggle" title="Possédée ?" disabled="@(!Store.CanEdit || _busy)"
-                            @onclick="() => ToggleOwnedAsync(paint)">
-                        @(paint.Owned ? "✅" : "⬜")
-                    </button>
                 </div>
             }
         </section>
     }
-    @if (!Filtered.Any())
-    {
-        <p class="empty">Aucune peinture pour ces filtres.</p>
-    }
+    <p class="form-hint">Liste calculée à partir des recettes : pour la modifier, modifie les recettes.</p>
 }
 
 @code {
-    [SupplyParameterFromQuery(Name = "vue")] public string? Vue { get; set; }
-    [SupplyParameterFromQuery(Name = "ajout")] public string? Ajout { get; set; }
-
-    /// <summary>Ordre d'affichage des types : celui du hobby (Base → Spray), inconnus à la fin.</summary>
-    private static int TypeOrder(string type) =>
-        Array.IndexOf(Labels.PaintTypes, type) is var i and >= 0 ? i : 99;
-
-    private bool _shopping;
     private string? _search;
-    private string? _type;
-    private string? _ownedFilter;
 
-    private Paint? _edit;
-    private bool _editIsNew;
-    private bool _busy;
-    private string? _error;
-
-    private IEnumerable<Paint> Filtered =>
-        (Store.Data?.Paints ?? [])
-            .Where(p => string.IsNullOrEmpty(_type) || p.Type == _type)
-            .Where(p => _ownedFilter switch { "owned" => p.Owned, "missing" => !p.Owned, _ => true })
-            .Where(p => string.IsNullOrWhiteSpace(_search)
-                        || p.Name.Contains(_search, StringComparison.OrdinalIgnoreCase)
-                        || p.Brand.Contains(_search, StringComparison.OrdinalIgnoreCase));
+    private IEnumerable<(string Paint, List<Recipe> Recipes)> Filtered =>
+        Store.PaintsUsed.Where(p => string.IsNullOrWhiteSpace(_search)
+                                    || p.Paint.Contains(_search.Trim(), StringComparison.OrdinalIgnoreCase));
 
     protected override async Task OnInitializedAsync()
     {
         Store.Changed += OnChanged;
-        _shopping = Vue == "courses";
         await Store.EnsureLoadedAsync();
-        if (Ajout is not null && Store.CanEdit)
-            StartAdd();
-    }
-
-    private void StartAdd()
-    {
-        _edit = new Paint();
-        _editIsNew = true;
-    }
-
-    private async Task StartEdit(Paint paint)
-    {
-        if (!Store.CanEdit) return;
-        _edit = CollectionStore.Clone(paint);
-        _editIsNew = false;
-        StateHasChanged();
-        await JS.InvokeVoidAsync("hobby.scrollToId", "paint-form");
-    }
-
-    private async Task SaveEditAsync()
-    {
-        var edited = _edit!;
-        edited.Name = edited.Name.Trim();
-        var isNew = _editIsNew;
-        await RunAsync(async () =>
-        {
-            var (ok, error) = await Store.SaveAsync(c =>
-            {
-                var index = c.Paints.FindIndex(p => p.Id == edited.Id);
-                if (index >= 0) c.Paints[index] = edited;
-                else c.Paints.Add(edited);
-                return true;
-            }, $"{(isNew ? "Ajout" : "Modif")} peinture : {edited.Name}");
-            if (ok) _edit = null;
-            else _error = error;
-        });
-    }
-
-    private Task ToggleOwnedAsync(Paint paint) => RunAsync(async () =>
-    {
-        var id = paint.Id;
-        var owned = !paint.Owned;
-        var (ok, error) = await Store.SaveAsync(c =>
-        {
-            var p = c.Paints.FirstOrDefault(x => x.Id == id);
-            if (p is null) return false;
-            p.Owned = owned;
-            return true;
-        }, $"{paint.Name} : {(owned ? "achetée" : "plus en stock")}");
-        if (!ok) _error = error;
-    });
-
-    private async Task DeleteAsync()
-    {
-        var paint = _edit!;
-        var used = Store.RecipesUsing(paint.Id).Count();
-        var question = used > 0
-            ? $"« {paint.Name} » est utilisée dans {used} recette(s) : elle y restera en texte libre. Supprimer ?"
-            : $"Supprimer « {paint.Name} » ?";
-        if (!await JS.InvokeAsync<bool>("confirm", question))
-            return;
-
-        await RunAsync(async () =>
-        {
-            var (ok, error) = await Store.SaveAsync(c =>
-            {
-                // Les étapes qui l'utilisaient gardent le nom en texte libre.
-                foreach (var step in c.Recipes.SelectMany(r => r.Steps).Where(s => s.PaintId == paint.Id))
-                {
-                    step.PaintId = null;
-                    step.PaintName = paint.Name;
-                }
-                return c.Paints.RemoveAll(p => p.Id == paint.Id) > 0;
-            }, $"Suppression peinture : {paint.Name}");
-            if (ok) _edit = null;
-            else _error = error;
-        });
-    }
-
-    private async Task CopyShoppingAsync()
-    {
-        var text = "🛒 Peintures à acheter\n" + string.Join("\n",
-            Store.ShoppingList.Select(p => $"• {p.Name} ({p.Brand} {p.Type})"));
-        await JS.InvokeVoidAsync("hobby.copyText", text);
-    }
-
-    private async Task RunAsync(Func<Task> action)
-    {
-        _busy = true; _error = null;
-        try { await action(); }
-        finally { _busy = false; }
     }
 
     private void OnChanged() => InvokeAsync(StateHasChanged);

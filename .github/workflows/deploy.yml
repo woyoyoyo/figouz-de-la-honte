@@ -3,9 +3,10 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
-    # Les modifs faites depuis l'app (commits sur data/) ne redéploient pas l'app.
+    # Les modifs faites depuis l'app (commits sur recettes/ et figurines/) ne redéploient pas l'app.
     paths-ignore:
-      - "data/**"
+      - "recettes/**"
+      - "figurines/**"
   workflow_dispatch:
 
 permissions:

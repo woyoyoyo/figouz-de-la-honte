@@ -36,20 +36,19 @@ public static class Labels
         "Necromunda", "Blood Bowl", "Warcry", "The Old World", "Autre"
     ];
 
-    public static readonly string[] PaintTypes =
-    [
-        "Base", "Layer", "Shade", "Contrast", "Dry", "Technical", "Air", "Spray"
-    ];
-
-    public static readonly string[] Brands =
-    [
-        "Citadel", "Vallejo", "Army Painter", "AK Interactive", "Scale75", "Pro Acryl", "Autre"
-    ];
-
     public static readonly string[] Techniques =
     [
-        "Sous-couche", "Base", "Lavis", "Lavis ciblé", "Brossage à sec", "Couche",
+        "Sous-couche", "Base", "Lavis", "Lavis ciblé", "Assombrissement", "Brossage à sec", "Couche",
         "Éclaircissement", "Liseré", "Glacis", "Contrast", "Point de lumière",
         "Effet", "Vernis", "Socle"
     ];
+
+    /// <summary>Marques connues, pour regrouper la page Peintures (« AK Pale Yellow » → AK).</summary>
+    public static readonly string[] Brands =
+    [
+        "Citadel", "Vallejo", "AK", "Army Painter", "Scale75", "Pro Acryl", "Two Thin Coats"
+    ];
+
+    public static string BrandOf(string paint) =>
+        Brands.FirstOrDefault(b => paint.StartsWith(b + " ", StringComparison.OrdinalIgnoreCase)) ?? "Autres";
 }

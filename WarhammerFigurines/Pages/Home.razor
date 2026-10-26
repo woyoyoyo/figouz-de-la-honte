@@ -6,7 +6,7 @@
 
 <header class="page-header">
     <h1>Figouz de la Honte</h1>
-    @if (Store.Data is not null)
+    @if (Store.Loaded)
     {
         var total = Store.CountModels();
         var done = Store.CountModels(m => m.Status >= MiniStatus.Painted);
@@ -19,7 +19,7 @@
 
 <SyncBanner />
 
-@if (Store.Data is null)
+@if (!Store.Loaded)
 {
     <p class="muted">Chargement…</p>
 }
@@ -40,14 +40,14 @@ else
         </div>
     </section>
 
-    var painting = Store.Data.Miniatures.Where(m => m.Status == MiniStatus.Painting).ToList();
+    var painting = Store.Miniatures.Where(m => m.Status == MiniStatus.Painting).ToList();
     @if (painting.Count > 0)
     {
         <section class="card">
             <h2 class="card-title">🖌️ Sur la table</h2>
             @foreach (var mini in painting)
             {
-                <a class="list-row" href="figurine/@mini.Id">
+                <a class="list-row" href="figurine/@mini.Slug">
                     <span class="list-row-main">
                         <b>@mini.Name</b>
                         <small>@mini.Faction@(mini.Quantity > 1 ? $" · ×{mini.Quantity}" : "")</small>
@@ -58,31 +58,14 @@ else
         </section>
     }
 
-    var shopping = Store.ShoppingList.ToList();
-    @if (shopping.Count > 0)
-    {
-        <section class="card">
-            <h2 class="card-title">🛒 À acheter pour tes recettes</h2>
-            <div class="chips">
-                @foreach (var paint in shopping)
-                {
-                    <span class="chip"><PaintSwatch Paint="paint" /> @paint.Name</span>
-                }
-            </div>
-            <a class="link-more" href="peintures?vue=courses">Voir la liste de courses ›</a>
-        </section>
-    }
-
     <section class="card">
         <h2 class="card-title">Accès rapide</h2>
         <div class="quick-actions">
             <a class="quick-action" href="figurine/nouvelle">➕ Figurine</a>
             <a class="quick-action" href="recette/nouvelle">➕ Recette</a>
-            <a class="quick-action" href="peintures?ajout=1">➕ Peinture</a>
         </div>
         <p class="muted small">
-            @Store.Data.Recipes.Count recette(s) ·
-            @Store.Data.Paints.Count(p => p.Owned) / @Store.Data.Paints.Count peinture(s) possédée(s)
+            @Store.Recipes.Count recette(s) · @Store.PaintsUsed.Count() peinture(s) utilisée(s)
         </p>
     </section>
 }

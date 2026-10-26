@@ -1,9 +1,0 @@
-@* Pastille de couleur ; contour pointillé si la peinture n'est pas possédée. *@
-<span class="swatch @(Paint is { Owned: false } ? "swatch-missing" : "") @(Large ? "swatch-lg" : "")"
-      style="background:@(Paint?.Hex ?? "transparent")"
-      title="@(Paint is null ? "Hors catalogue" : Paint.Owned ? "Possédée" : "À acheter")"></span>
-
-@code {
-    [Parameter] public Paint? Paint { get; set; }
-    [Parameter] public bool Large { get; set; }
-}

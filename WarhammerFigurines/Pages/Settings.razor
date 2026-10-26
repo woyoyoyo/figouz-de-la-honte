@@ -42,23 +42,19 @@
     </label>
 
     <details class="config-section">
-        <summary>🔧 Emplacement des données</summary>
+        <summary>🔧 Repo des données</summary>
         <label class="form-field">
             <span class="form-label">Propriétaire</span>
             <input class="form-input" @bind="_owner" autocapitalize="off" />
         </label>
-        <label class="form-field">
-            <span class="form-label">Repo</span>
-            <input class="form-input" @bind="_repo" autocapitalize="off" />
-        </label>
         <div class="filters-row">
+            <label class="form-field">
+                <span class="form-label">Repo</span>
+                <input class="form-input" @bind="_repo" autocapitalize="off" />
+            </label>
             <label class="form-field">
                 <span class="form-label">Branche</span>
                 <input class="form-input" @bind="_branch" autocapitalize="off" />
-            </label>
-            <label class="form-field">
-                <span class="form-label">Fichier</span>
-                <input class="form-input" @bind="_path" autocapitalize="off" />
             </label>
         </div>
         <button class="action-btn" @onclick="ResetTarget">↺ Valeurs par défaut</button>
@@ -71,7 +67,7 @@
 
 <div class="card form">
     <button class="action-btn" @onclick="ReloadAsync" disabled="@_busy">⟳ Recharger les données</button>
-    <a class="action-btn" href="@HistoryUrl" target="_blank" rel="noopener">🕓 Historique des modifications (GitHub)</a>
+    <a class="action-btn" href="@($"https://github.com/{_owner}/{_repo}/commits/{_branch}")" target="_blank" rel="noopener">🕓 Historique des modifications (GitHub)</a>
     <button class="action-btn" @onclick="HardRefreshAsync" disabled="@_busy">🔄 Forcer la mise à jour de l'app</button>
     @if (Config.CanSave)
     {
@@ -86,13 +82,11 @@
 
 @code {
     private string? _token;
-    private string _owner = "", _repo = "", _branch = "", _path = "";
+    private string _owner = "", _repo = "", _branch = "";
     private bool _showToken;
     private bool _busy;
     private string? _feedback;
     private string _feedbackClass = "";
-
-    private string HistoryUrl => $"https://github.com/{_owner}/{_repo}/commits/{_branch}/{_path}";
 
     protected override async Task OnInitializedAsync()
     {
@@ -102,21 +96,18 @@
         LoadTarget(Config.Target);
     }
 
-    private void LoadTarget(RepoTarget t) =>
-        (_owner, _repo, _branch, _path) = (t.Owner, t.Repo, t.Branch, t.Path);
+    private void LoadTarget(RepoTarget t) => (_owner, _repo, _branch) = (t.Owner, t.Repo, t.Branch);
 
     private void ResetTarget() => LoadTarget(SettingsService.DefaultTarget);
 
     private async Task SaveAsync()
     {
         _busy = true; _feedback = null;
-        var target = new RepoTarget(_owner.Trim(), _repo.Trim(), _branch.Trim(), _path.Trim().TrimStart('/'));
-        await Config.SaveAsync(target, _token);
+        await Config.SaveAsync(new RepoTarget(_owner.Trim(), _repo.Trim(), _branch.Trim()), _token);
         await Store.ReloadAsync();
-        if (Store.Source == DataSource.GitHub)
+        if (Store.Source == DataSource.GitHub && Store.LoadError is null)
         {
-            var d = Store.Data!;
-            _feedback = $"✅ Chargé : {d.Miniatures.Count} figurine(s), {d.Recipes.Count} recette(s), {d.Paints.Count} peinture(s).";
+            _feedback = $"✅ Chargé : {Store.Miniatures.Count} figurine(s), {Store.Recipes.Count} recette(s).";
             _feedbackClass = "sync-ok";
         }
         else

@@ -17,7 +17,7 @@
     <div class="card form">
         <label class="form-field">
             <span class="form-label">Nom *</span>
-            <input class="form-input" @bind="_edit.Name" placeholder="ex : Armure Ultramarines" />
+            <input class="form-input" @bind="_edit.Name" placeholder="ex : Archers Sylvains" />
         </label>
         <label class="form-field">
             <span class="form-label">Faction</span>
@@ -29,7 +29,7 @@
         </label>
         <label class="form-field">
             <span class="form-label">Tags (séparés par des virgules)</span>
-            <input class="form-input" @bind="_tags" placeholder="ex : armure, bleu, rapide" />
+            <input class="form-input" @bind="_tags" placeholder="ex : aérographe, capes" />
         </label>
     </div>
 
@@ -48,7 +48,7 @@
             <div class="filters-row">
                 <label class="form-field">
                     <span class="form-label">Zone</span>
-                    <input class="form-input" @bind="step.Area" list="areas" placeholder="ex : Armure" />
+                    <input class="form-input" @bind="step.Area" list="areas" placeholder="ex : Capes" />
                 </label>
                 <label class="form-field">
                     <span class="form-label">Technique</span>
@@ -56,31 +56,12 @@
                 </label>
             </div>
             <label class="form-field">
-                <span class="form-label">Peinture <PaintSwatch Paint="Store.PaintById(step.PaintId)" /></span>
-                <select class="form-input" value="@(step.PaintId ?? "")"
-                        @onchange="e => step.PaintId = string.IsNullOrEmpty(e.Value?.ToString()) ? null : e.Value.ToString()">
-                    <option value="">— Hors catalogue (texte libre) —</option>
-                    @foreach (var type in PaintsByType)
-                    {
-                        <optgroup label="@type.Key">
-                            @foreach (var paint in type)
-                            {
-                                <option value="@paint.Id">@paint.Name@(paint.Owned ? "" : " (à acheter)")</option>
-                            }
-                        </optgroup>
-                    }
-                </select>
+                <span class="form-label">Peinture (marque + nom)</span>
+                <input class="form-input" @bind="step.Paint" list="paints" placeholder="ex : AK Pale Yellow" />
             </label>
-            @if (step.PaintId is null)
-            {
-                <label class="form-field">
-                    <span class="form-label">Peinture (texte libre)</span>
-                    <input class="form-input" @bind="step.PaintName" placeholder="ex : Mélange 50/50 Macragge + Calgar" />
-                </label>
-            }
             <label class="form-field">
                 <span class="form-label">Notes</span>
-                <input class="form-input" @bind="step.Notes" placeholder="ex : 2 couches fines, pinceau M" />
+                <input class="form-input" @bind="step.Notes" placeholder="ex : à l'aéro, 2 couches fines" />
             </label>
         </div>
     }
@@ -97,8 +78,9 @@
     <Suggestions Id="factions" Values="Store.Factions" />
     <Suggestions Id="techniques" Values="Labels.Techniques" />
     <Suggestions Id="areas" Values="KnownAreas" />
+    <Suggestions Id="paints" Values="Store.PaintsUsed.Select(p => p.Paint)" />
 }
-else if (Store.Data is null)
+else if (!Store.Loaded)
 {
     <p class="muted">Chargement…</p>
 }
@@ -126,12 +108,6 @@ else
         <section class="card"><p class="notes">@Recipe.Description</p></section>
     }
 
-    var missing = Store.MissingPaints(Recipe).ToList();
-    @if (missing.Count > 0)
-    {
-        <div class="sync-status sync-warn">🛒 À acheter : @string.Join(", ", missing.Select(p => p.Name))</div>
-    }
-
     @foreach (var area in Recipe.Steps.Select((s, i) => (Step: s, Num: i + 1)).GroupBy(x => string.IsNullOrWhiteSpace(x.Step.Area) ? "Général" : x.Step.Area))
     {
         <section class="card">
@@ -139,13 +115,11 @@ else
             <ol class="steps">
                 @foreach (var (step, num) in area)
                 {
-                    var paint = Store.PaintById(step.PaintId);
                     <li class="step-row">
                         <span class="step-num">@num</span>
-                        <PaintSwatch Paint="paint" Large="true" />
                         <span class="step-main">
-                            <b>@Store.PaintLabel(step)</b>
-                            <small>@step.Technique@(paint is null ? "" : $" · {paint.Brand} {paint.Type}")</small>
+                            <b>@step.Paint</b>
+                            <small>@step.Technique</small>
                             @if (!string.IsNullOrWhiteSpace(step.Notes)) { <small class="muted">@step.Notes</small> }
                         </span>
                     </li>
@@ -154,14 +128,14 @@ else
         </section>
     }
 
-    var minis = Store.MiniaturesUsing(Recipe.Id).ToList();
+    var minis = Store.MiniaturesUsing(Recipe.Slug).ToList();
     @if (minis.Count > 0)
     {
         <section class="card">
             <h2 class="card-title">⚔️ Utilisée sur</h2>
             @foreach (var mini in minis)
             {
-                <a class="list-row" href="figurine/@mini.Id">
+                <a class="list-row" href="figurine/@mini.Slug">
                     <span class="list-row-main"><b>@mini.Name</b></span>
                     <StatusBadge Status="mini.Status" />
                 </a>
@@ -178,6 +152,7 @@ else
             <button class="action-btn btn-danger" @onclick="DeleteAsync" disabled="@_busy">🗑️ Supprimer</button>
         }
     </div>
+    <p class="form-hint">Fichier : recettes/@(Recipe.Slug).json</p>
     @if (_error is not null) { <div class="sync-status sync-warn">⚠️ @_error</div> }
     @if (_info is not null) { <div class="sync-status sync-ok">@_info</div> }
 }
@@ -186,7 +161,7 @@ else
     [Parameter] public string Id { get; set; } = "";
 
     private bool IsNew => Id == "nouvelle";
-    private Recipe? Recipe => Store.RecipeById(Id);
+    private Recipe? Recipe => Store.RecipeBySlug(Id);
 
     private Recipe? _edit;
     private string? _tags;
@@ -194,11 +169,8 @@ else
     private string? _error;
     private string? _info;
 
-    private IEnumerable<IGrouping<string, Paint>> PaintsByType =>
-        (Store.Data?.Paints ?? []).OrderBy(p => p.Name).GroupBy(p => p.Type).OrderBy(g => g.Key);
-
     private IEnumerable<string> KnownAreas =>
-        (Store.Data?.Recipes ?? []).SelectMany(r => r.Steps).Select(s => s.Area)
+        Store.Recipes.SelectMany(r => r.Steps).Select(s => s.Area)
             .Where(a => !string.IsNullOrWhiteSpace(a)).Select(a => a!).Distinct().Order();
 
     protected override async Task OnInitializedAsync()
@@ -247,38 +219,36 @@ else
         var edited = _edit!;
         edited.Name = edited.Name.Trim();
         edited.Faction = string.IsNullOrWhiteSpace(edited.Faction) ? null : edited.Faction.Trim();
+        edited.Description = string.IsNullOrWhiteSpace(edited.Description) ? null : edited.Description.Trim();
         edited.Tags = (_tags ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Distinct().ToList();
-        edited.Steps.RemoveAll(s => s.PaintId is null && string.IsNullOrWhiteSpace(s.PaintName) && string.IsNullOrWhiteSpace(s.Notes));
-        foreach (var step in edited.Steps.Where(s => s.PaintId is not null))
-            step.PaintName = null;
+        edited.Steps.RemoveAll(s => string.IsNullOrWhiteSpace(s.Paint) && string.IsNullOrWhiteSpace(s.Notes));
+        foreach (var step in edited.Steps)
+        {
+            step.Paint = step.Paint?.Trim() ?? "";
+            step.Area = string.IsNullOrWhiteSpace(step.Area) ? null : step.Area.Trim();
+            step.Notes = string.IsNullOrWhiteSpace(step.Notes) ? null : step.Notes.Trim();
+        }
 
         var wasNew = IsNew;
         await RunAsync(async () =>
         {
-            var (ok, error) = await Store.SaveAsync(c =>
-            {
-                var index = c.Recipes.FindIndex(r => r.Id == edited.Id);
-                if (index >= 0) c.Recipes[index] = edited;
-                else c.Recipes.Add(edited);
-                return true;
-            }, $"{(wasNew ? "Ajout" : "Modif")} recette : {edited.Name}");
-
+            var (ok, error) = await Store.SaveAsync(edited, $"{(wasNew ? "Ajout" : "Modif")} recette : {edited.Name}");
             if (!ok) { _error = error; return; }
             _edit = null;
-            if (wasNew) Nav.NavigateTo($"recette/{edited.Id}", replace: true);
+            if (wasNew) Nav.NavigateTo($"recette/{edited.Slug}", replace: true);
         });
     }
 
     private async Task DuplicateAsync()
     {
         var copy = CollectionStore.Clone(Recipe!);
-        copy.Id = NewId.For("r");
+        copy.Slug = "";
+        copy.Sha = null;
         copy.Name += " (copie)";
         await RunAsync(async () =>
         {
-            var (ok, error) = await Store.SaveAsync(c => { c.Recipes.Add(copy); return true; },
-                $"Ajout recette : {copy.Name}");
-            if (ok) Nav.NavigateTo($"recette/{copy.Id}");
+            var (ok, error) = await Store.SaveAsync(copy, $"Ajout recette : {copy.Name}");
+            if (ok) Nav.NavigateTo($"recette/{copy.Slug}");
             else _error = error;
         });
     }
@@ -287,15 +257,9 @@ else
     {
         if (!await JS.InvokeAsync<bool>("confirm", $"Supprimer la recette « {Recipe!.Name} » ?"))
             return;
-        var id = Id;
-        var name = Recipe.Name;
         await RunAsync(async () =>
         {
-            var (ok, error) = await Store.SaveAsync(c =>
-            {
-                foreach (var mini in c.Miniatures) mini.RecipeIds.Remove(id);
-                return c.Recipes.RemoveAll(r => r.Id == id) > 0;
-            }, $"Suppression recette : {name}");
+            var (ok, error) = await Store.DeleteAsync(Recipe!);
             if (ok) Nav.NavigateTo("recettes");
             else _error = error;
         });
@@ -311,7 +275,7 @@ else
         {
             lines.Add("");
             lines.Add($"▸ {area.Key}");
-            lines.AddRange(area.Select(s => $"  • {s.Technique} : {Store.PaintLabel(s)}"
+            lines.AddRange(area.Select(s => $"  • {s.Technique} : {s.Paint}"
                                             + (string.IsNullOrWhiteSpace(s.Notes) ? "" : $" ({s.Notes})")));
         }
         await JS.InvokeVoidAsync("hobby.copyText", string.Join("\n", lines));

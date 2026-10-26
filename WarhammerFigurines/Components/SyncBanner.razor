@@ -18,6 +18,14 @@ else if (Store.Source == DataSource.GitHub && !Config.CanSave)
     <div class="sync-status sync-readonly">👁️ Lecture seule — <a href="parametres">ajoute ton token</a> pour modifier.</div>
 }
 
+@if (Store.BrokenFiles.Count > 0)
+{
+    <div class="sync-status sync-warn">
+        ⚠️ Fichier(s) JSON illisible(s), ignoré(s) :
+        <small>@string.Join(", ", Store.BrokenFiles)</small>
+    </div>
+}
+
 @code {
     protected override void OnInitialized() => Store.Changed += OnChanged;
     private void OnChanged() => InvokeAsync(StateHasChanged);

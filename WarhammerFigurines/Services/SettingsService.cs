@@ -1,7 +1,7 @@
 namespace WarhammerFigurines.Services;
 
-/// <summary>Emplacement du fichier de données dans GitHub.</summary>
-public record RepoTarget(string Owner, string Repo, string Branch, string Path);
+/// <summary>Repo GitHub qui contient les dossiers recettes/ et figurines/.</summary>
+public record RepoTarget(string Owner, string Repo, string Branch);
 
 /// <summary>
 /// Configuration locale (par appareil) : repo cible et token GitHub.
@@ -10,11 +10,10 @@ public record RepoTarget(string Owner, string Repo, string Branch, string Path);
 /// </summary>
 public class SettingsService(LocalStorageService storage)
 {
-    private const string TargetKey = "wh.target";
+    private const string TargetKey = "wh.repo";
     private const string TokenKey  = "wh.token";
 
-    public static readonly RepoTarget DefaultTarget =
-        new(AppInfo.DefaultOwner, AppInfo.DefaultRepo, "main", "data/collection.json");
+    public static readonly RepoTarget DefaultTarget = new(AppInfo.DefaultOwner, AppInfo.DefaultRepo, "main");
 
     private bool _loaded;
 
@@ -39,7 +38,7 @@ public class SettingsService(LocalStorageService storage)
         if (target == DefaultTarget)
             await storage.RemoveAsync(TargetKey);
         else
-            await storage.SetAsync(TargetKey, $"{target.Owner}|{target.Repo}|{target.Branch}|{target.Path}");
+            await storage.SetAsync(TargetKey, $"{target.Owner}|{target.Repo}|{target.Branch}");
 
         if (Token is null)
             await storage.RemoveAsync(TokenKey);
@@ -52,6 +51,6 @@ public class SettingsService(LocalStorageService storage)
     private static RepoTarget? Parse(string? raw)
     {
         var parts = raw?.Split('|');
-        return parts is { Length: 4 } ? new RepoTarget(parts[0], parts[1], parts[2], parts[3]) : null;
+        return parts is { Length: 3 } ? new RepoTarget(parts[0], parts[1], parts[2]) : null;
     }
 }
