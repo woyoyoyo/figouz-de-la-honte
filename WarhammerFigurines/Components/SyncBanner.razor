@@ -1,6 +1,5 @@
 @implements IDisposable
 @inject CollectionStore Store
-@inject SettingsService Config
 
 @if (Store.LoadError is not null)
 {
@@ -12,10 +11,6 @@
 else if (Store.Source == DataSource.Cache)
 {
     <div class="sync-status sync-readonly">📴 Hors ligne — copie du @Store.LastSync?.ToString("dd/MM HH:mm").</div>
-}
-else if (Store.Source == DataSource.GitHub && !Config.CanSave)
-{
-    <div class="sync-status sync-readonly">👁️ Lecture seule — <a href="parametres">ajoute ton token</a> pour modifier.</div>
 }
 
 @if (Store.BrokenFiles.Count > 0)

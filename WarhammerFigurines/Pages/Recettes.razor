@@ -15,11 +15,6 @@
     <input class="form-input" type="search" placeholder="🔍 Nom, zone, peinture…" @bind="_search" @bind:event="oninput" />
 </div>
 
-@if (Store.CanEdit)
-{
-    <a class="action-btn btn-primary" href="recette/nouvelle">➕ Nouvelle recette</a>
-}
-
 @if (!Store.Loaded)
 {
     <p class="muted">Chargement…</p>

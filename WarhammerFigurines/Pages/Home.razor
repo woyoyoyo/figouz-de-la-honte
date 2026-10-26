@@ -59,14 +59,10 @@ else
     }
 
     <section class="card">
-        <h2 class="card-title">Accès rapide</h2>
         <div class="quick-actions">
-            <a class="quick-action" href="figurine/nouvelle">➕ Figurine</a>
-            <a class="quick-action" href="recette/nouvelle">➕ Recette</a>
+            <a class="quick-action" href="recettes">📜 @Store.Recipes.Count recette(s)</a>
+            <a class="quick-action" href="peintures">🎨 @Store.PaintsUsed.Count() peinture(s)</a>
         </div>
-        <p class="muted small">
-            @Store.Recipes.Count recette(s) · @Store.PaintsUsed.Count() peinture(s) utilisée(s)
-        </p>
     </section>
 }
 

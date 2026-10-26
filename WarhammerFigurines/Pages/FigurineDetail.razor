@@ -1,91 +1,12 @@
 @page "/figurine/{Id}"
 @implements IDisposable
 @inject CollectionStore Store
-@inject NavigationManager Nav
-@inject IJSRuntime JS
 
 <PageTitle>@(Mini?.Name ?? "Figurine") — Figouz de la Honte</PageTitle>
 
 <a class="back-link" href="figurines">‹ Figurines</a>
 
-@if (_edit is not null)
-{
-    <header class="page-header">
-        <h1>@(IsNew ? "➕ Nouvelle figurine" : "✏️ Modifier")</h1>
-    </header>
-
-    <div class="card form">
-        <label class="form-field">
-            <span class="form-label">Nom *</span>
-            <input class="form-input" @bind="_edit.Name" placeholder="ex : Archers sylvains" />
-        </label>
-        <label class="form-field">
-            <span class="form-label">Jeu</span>
-            <input class="form-input" @bind="_edit.Game" list="games" />
-        </label>
-        <label class="form-field">
-            <span class="form-label">Faction</span>
-            <input class="form-input" @bind="_edit.Faction" list="factions" placeholder="ex : Elfes Sylvains" />
-        </label>
-        <div class="filters-row">
-            <label class="form-field">
-                <span class="form-label">Quantité</span>
-                <input class="form-input" type="number" min="1" @bind="_edit.Quantity" />
-            </label>
-            <label class="form-field">
-                <span class="form-label">Statut</span>
-                <select class="form-input" @bind="_edit.Status">
-                    @foreach (var status in Labels.Statuses)
-                    {
-                        <option value="@status">@Labels.Icon(status) @Labels.Of(status)</option>
-                    }
-                </select>
-            </label>
-        </div>
-
-        <div class="form-field">
-            <span class="form-label">Recettes utilisées</span>
-            @if (Store.Recipes.Count == 0)
-            {
-                <span class="form-hint">Aucune recette pour l'instant.</span>
-            }
-            else
-            {
-                <div class="check-list">
-                    @foreach (var recipe in Store.Recipes)
-                    {
-                        <label class="check-item">
-                            <input type="checkbox" checked="@_edit.Recipes.Contains(recipe.Slug)"
-                                   @onchange="e => ToggleRecipe(recipe.Slug, (bool)e.Value!)" />
-                            @recipe.Name <small class="muted">@recipe.Faction</small>
-                        </label>
-                    }
-                </div>
-            }
-        </div>
-
-        <label class="form-field">
-            <span class="form-label">Photo (URL)</span>
-            <input class="form-input" @bind="_edit.PhotoUrl" placeholder="https://…" />
-        </label>
-        <label class="form-field">
-            <span class="form-label">Notes</span>
-            <textarea class="form-input" rows="4" @bind="_edit.Notes"></textarea>
-        </label>
-
-        <div class="form-actions">
-            <button class="action-btn btn-primary" @onclick="SaveAsync" disabled="@(_busy || string.IsNullOrWhiteSpace(_edit.Name))">
-                @(_busy ? "⏳ Enregistrement…" : "💾 Enregistrer")
-            </button>
-            <button class="action-btn" @onclick="Cancel" disabled="@_busy">Annuler</button>
-        </div>
-        @if (_error is not null) { <div class="sync-status sync-warn">⚠️ @_error</div> }
-    </div>
-
-    <Suggestions Id="games" Values="Labels.Games" />
-    <Suggestions Id="factions" Values="Store.Factions" />
-}
-else if (!Store.Loaded)
+@if (!Store.Loaded)
 {
     <p class="muted">Chargement…</p>
 }
@@ -112,15 +33,11 @@ else
         <div class="stepper">
             @foreach (var status in Labels.Statuses)
             {
-                <button class="step @(status <= Mini.Status ? "step-done" : "") @(status == Mini.Status ? "step-current" : "")"
-                        title="@Labels.Of(status)" disabled="@(!Store.CanEdit || _busy)"
-                        @onclick="() => SetStatusAsync(status)">
-                    @Labels.Icon(status)
-                </button>
+                <span class="step @(status <= Mini.Status ? "step-done" : "") @(status == Mini.Status ? "step-current" : "")"
+                      title="@Labels.Of(status)">@Labels.Icon(status)</span>
             }
         </div>
         <div class="stepper-label"><StatusBadge Status="Mini.Status" /></div>
-        @if (_error is not null) { <div class="sync-status sync-warn">⚠️ @_error</div> }
     </section>
 
     <section class="card">
@@ -156,96 +73,17 @@ else
             <p class="notes">@Mini.Notes</p>
         </section>
     }
-
-    @if (Store.CanEdit)
-    {
-        <div class="form-actions">
-            <button class="action-btn btn-primary" @onclick="StartEdit">✏️ Modifier</button>
-            <button class="action-btn btn-danger" @onclick="DeleteAsync" disabled="@_busy">🗑️ Supprimer</button>
-        </div>
-    }
 }
 
 @code {
     [Parameter] public string Id { get; set; } = "";
 
-    private bool IsNew => Id == "nouvelle";
     private Miniature? Mini => Store.MiniatureBySlug(Id);
-
-    private Miniature? _edit;
-    private bool _busy;
-    private string? _error;
 
     protected override async Task OnInitializedAsync()
     {
         Store.Changed += OnChanged;
         await Store.EnsureLoadedAsync();
-    }
-
-    protected override void OnParametersSet()
-    {
-        _error = null;
-        _edit = IsNew ? new Miniature { Added = DateOnly.FromDateTime(DateTime.Today), Game = Labels.Games[0] } : null;
-    }
-
-    private void StartEdit() => _edit = CollectionStore.Clone(Mini!);
-
-    private void Cancel()
-    {
-        if (IsNew) Nav.NavigateTo("figurines");
-        else _edit = null;
-    }
-
-    private void ToggleRecipe(string slug, bool on)
-    {
-        _edit!.Recipes.Remove(slug);
-        if (on) _edit.Recipes.Add(slug);
-    }
-
-    private async Task SaveAsync()
-    {
-        var edited = _edit!;
-        edited.Name = edited.Name.Trim();
-        edited.Faction = string.IsNullOrWhiteSpace(edited.Faction) ? null : edited.Faction.Trim();
-        edited.Notes = string.IsNullOrWhiteSpace(edited.Notes) ? null : edited.Notes;
-        edited.PhotoUrl = string.IsNullOrWhiteSpace(edited.PhotoUrl) ? null : edited.PhotoUrl.Trim();
-        edited.Quantity = Math.Max(1, edited.Quantity);
-
-        var wasNew = IsNew;
-        await RunAsync(async () =>
-        {
-            var (ok, error) = await Store.SaveAsync(edited, $"{(wasNew ? "Ajout" : "Modif")} figurine : {edited.Name}");
-            if (!ok) { _error = error; return; }
-            _edit = null;
-            if (wasNew) Nav.NavigateTo($"figurine/{edited.Slug}", replace: true);
-        });
-    }
-
-    private Task SetStatusAsync(MiniStatus status) => RunAsync(async () =>
-    {
-        var copy = CollectionStore.Clone(Mini!);
-        copy.Status = status;
-        var (ok, error) = await Store.SaveAsync(copy, $"{copy.Name} → {Labels.Of(status)}");
-        if (!ok) _error = error;
-    });
-
-    private async Task DeleteAsync()
-    {
-        if (!await JS.InvokeAsync<bool>("confirm", $"Supprimer « {Mini!.Name} » ?"))
-            return;
-        await RunAsync(async () =>
-        {
-            var (ok, error) = await Store.DeleteAsync(Mini!);
-            if (ok) Nav.NavigateTo("figurines");
-            else _error = error;
-        });
-    }
-
-    private async Task RunAsync(Func<Task> action)
-    {
-        _busy = true; _error = null;
-        try { await action(); }
-        finally { _busy = false; }
     }
 
     private void OnChanged() => InvokeAsync(StateHasChanged);

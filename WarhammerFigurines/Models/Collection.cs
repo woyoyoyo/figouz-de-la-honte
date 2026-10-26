@@ -1,20 +1,12 @@
-using System.Globalization;
-using System.Text;
 using System.Text.Json.Serialization;
 
 namespace WarhammerFigurines.Models;
 
-/// <summary>
-/// Un fichier du repo (recettes/xxx.json ou figurines/xxx.json).
-/// Le nom du fichier sert d'identifiant ; le SHA est requis pour le réécrire.
-/// </summary>
+/// <summary>Un fichier du repo (recettes/xxx.json ou figurines/xxx.json) ; son nom sert d'identifiant.</summary>
 public abstract class RepoItem
 {
     /// <summary>Nom du fichier sans extension (ex : archers-sylvains).</summary>
     [JsonIgnore] public string Slug { get; set; } = "";
-
-    /// <summary>SHA du blob git lu — null pour un fichier pas encore créé.</summary>
-    [JsonIgnore] public string? Sha { get; set; }
 }
 
 /// <summary>Recette de peinture : une suite d'étapes, éventuellement par zone.</summary>
@@ -75,32 +67,4 @@ public enum MiniStatus
     Painting,
     Painted,
     Based
-}
-
-public static class Slug
-{
-    /// <summary>« Archers Sylvains » → « archers-sylvains » (sans accents, utilisable comme nom de fichier).</summary>
-    public static string From(string text)
-    {
-        var sb = new StringBuilder();
-        foreach (var c in text.Normalize(NormalizationForm.FormD).ToLowerInvariant())
-        {
-            if (CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.NonSpacingMark)
-                continue;
-            sb.Append(char.IsAsciiLetterOrDigit(c) ? c : '-');
-        }
-        var slug = string.Join('-', sb.ToString().Split('-', StringSplitOptions.RemoveEmptyEntries));
-        return slug.Length == 0 ? "sans-nom" : slug[..Math.Min(slug.Length, 60)];
-    }
-
-    /// <summary>Slug unique parmi ceux déjà pris (ajoute -2, -3…).</summary>
-    public static string Unique(string text, IEnumerable<string> taken)
-    {
-        var set = taken.ToHashSet();
-        var baseSlug = From(text);
-        var slug = baseSlug;
-        for (var i = 2; set.Contains(slug); i++)
-            slug = $"{baseSlug}-{i}";
-        return slug;
-    }
 }

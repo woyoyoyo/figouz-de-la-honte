@@ -1,0 +1,47 @@
+@page "/infos"
+@inject CollectionStore Store
+@inject IJSRuntime JS
+
+<PageTitle>Infos — Figouz de la Honte</PageTitle>
+
+<header class="page-header">
+    <h1>ℹ️ Infos</h1>
+</header>
+
+<div class="card form">
+    <p class="form-hint">
+        Site en lecture seule : les recettes et les figurines sont des fichiers JSON
+        dans le repo GitHub (dossiers <b>recettes/</b> et <b>figurines/</b>).
+        Une modification poussée sur GitHub apparaît ici au prochain rechargement.
+    </p>
+    <button class="action-btn" @onclick="ReloadAsync" disabled="@_busy">
+        @(_busy ? "⏳ Rechargement…" : "⟳ Recharger les données")
+    </button>
+    <a class="action-btn" href="@AppInfo.RepoUrl" target="_blank" rel="noopener">📂 Voir les fichiers sur GitHub</a>
+    <a class="action-btn" href="@($"{AppInfo.RepoUrl}/commits/{AppInfo.Branch}")" target="_blank" rel="noopener">🕓 Historique des modifications</a>
+    <button class="action-btn" @onclick="HardRefreshAsync" disabled="@_busy">🔄 Forcer la mise à jour de l'app</button>
+</div>
+
+<p class="app-version">
+    Figouz de la Honte — v@(AppInfo.Version)
+    @if (Store.LastSync is not null) { <br /><small>Dernière synchro : @Store.LastSync.Value.ToString("dd/MM/yyyy HH:mm")</small> }
+</p>
+
+@code {
+    private bool _busy;
+
+    protected override Task OnInitializedAsync() => Store.EnsureLoadedAsync();
+
+    private async Task ReloadAsync()
+    {
+        _busy = true;
+        await Store.ReloadAsync();
+        _busy = false;
+    }
+
+    private async Task HardRefreshAsync()
+    {
+        _busy = true;
+        await JS.InvokeVoidAsync("hobby.hardRefresh");
+    }
+}

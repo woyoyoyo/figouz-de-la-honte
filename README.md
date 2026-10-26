@@ -17,8 +17,9 @@ figurines/
   archers-sylvains.json      ← une figurine / unité = un fichier
 ```
 
-Le nom du fichier sert d'identifiant. Les fichiers se modifient depuis l'app
-ou à la main (éditeur GitHub, ou en local + commit).
+Le nom du fichier sert d'identifiant. **Le site est en lecture seule** : pas de compte,
+pas de token. Les fichiers se modifient à la main (éditeur GitHub, ou en local + commit) ;
+le site les relit directement dans le repo, sans redéploiement.
 
 ## Pages
 
@@ -28,7 +29,7 @@ ou à la main (éditeur GitHub, ou en local + commit).
 - `/recettes` — recettes de peinture groupées par faction
 - `/recette/:fichier` — étapes par zone (capes, peau, socle…), copie texte, duplication
 - `/peintures` — toutes les peintures citées dans les recettes, par marque (calculé, rien à saisir)
-- `/parametres` — token GitHub, repo, historique
+- `/infos` — recharger, liens vers les fichiers et l'historique GitHub
 
 ## Formats
 
@@ -68,19 +69,11 @@ Statuts : `Pile`, `Assembled`, `Primed`, `Painting`, `Painted`, `Based`.
 
 ## Fonctionnement
 
-- **Lecture** : l'API GitHub donne la liste des fichiers (2 appels), le contenu est lu sur
-  raw.githubusercontent.com (repo public → pas de token, pas de quota). Copie en cache localStorage
-  pour le hors-ligne ; un fichier n'est retéléchargé que s'il a changé.
-- **Écriture** : chaque modification est **un commit** sur le fichier concerné
-  (« Archers sylvains → Peinte », « Ajout recette : … »). L'historique git sert de journal et de sauvegarde.
-- Si le fichier a été modifié ailleurs entre-temps, GitHub refuse l'écriture : l'app le signale au lieu d'écraser.
+- L'API GitHub donne la liste des fichiers (2 appels, sans token : repo public), le contenu est lu sur
+  raw.githubusercontent.com au SHA du dernier commit (pas de cache périmé, pas de quota).
+- Copie en cache localStorage pour le hors-ligne ; un fichier n'est retéléchargé que s'il a changé.
+- Un fichier JSON invalide est ignoré et signalé en haut de page.
 - Les commits sur `recettes/` et `figurines/` ne relancent pas le déploiement de l'app (`paths-ignore`).
-
-## Token GitHub
-
-Pour modifier depuis l'app : GitHub → Settings → Developer settings → **Fine-grained tokens** →
-repo `figouz-de-la-honte` uniquement, permission **Contents : Read and write**.
-Le coller dans Réglages ; il reste stocké sur l'appareil (localStorage).
 
 ## Développement
 

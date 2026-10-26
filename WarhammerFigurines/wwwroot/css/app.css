@@ -335,13 +335,14 @@ h1:focus { outline: none; }
     border-radius: 10px;
     border: 1px solid var(--color-border);
     background: var(--color-card-2);
-    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     filter: grayscale(1) opacity(0.5);
 }
 
 .step-done { filter: none; border-color: #7a6418; }
 .step-current { background: var(--color-primary-soft); border-color: var(--color-primary); }
-.step:disabled { cursor: default; }
 
 .stepper-label {
     margin-top: 10px;

@@ -30,19 +30,6 @@ public static class Labels
 
     public static readonly MiniStatus[] Statuses = Enum.GetValues<MiniStatus>();
 
-    public static readonly string[] Games =
-    [
-        "Warhammer 40,000", "Age of Sigmar", "Kill Team", "Horus Heresy",
-        "Necromunda", "Blood Bowl", "Warcry", "The Old World", "Autre"
-    ];
-
-    public static readonly string[] Techniques =
-    [
-        "Sous-couche", "Base", "Lavis", "Lavis ciblé", "Assombrissement", "Brossage à sec", "Couche",
-        "Éclaircissement", "Liseré", "Glacis", "Contrast", "Point de lumière",
-        "Effet", "Vernis", "Socle"
-    ];
-
     /// <summary>Marques connues, pour regrouper la page Peintures (« AK Pale Yellow » → AK).</summary>
     public static readonly string[] Brands =
     [
